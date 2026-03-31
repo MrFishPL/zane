@@ -183,10 +183,19 @@ class AgentWorker:
                 {"task_id": task_id, "type": "status", "text": "Processing your request..."},
             )
 
-            # If there are PDF attachments, render them first and fetch
-            # base64 images so they can be included in the LLM call
+            # Collect attachments from current message AND conversation history
+            all_attachments = list(attachments)
+            for msg in history:
+                msg_atts = msg.get("attachments", [])
+                if msg_atts:
+                    for att in msg_atts:
+                        path = att.get("path", "")
+                        if path and not any(a.get("path") == path for a in all_attachments):
+                            all_attachments.append(att)
+
+            # Fetch base64 for all image/PDF attachments
             enriched_attachments = await self._prepare_attachments(
-                attachments, conversation_id, task_id
+                all_attachments, conversation_id, task_id
             )
 
             # Status callback the runner can use
