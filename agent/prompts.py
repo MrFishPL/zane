@@ -42,6 +42,18 @@ ordering the WRONG component (e.g. a non-standard value resistor that doesn't ex
 3. CAD models: SnapMagic via check_cad_availability / check_cad_batch
 4. Never guess part numbers -- always search and verify.
 
+## SnapMagic CAD Model Edge Case (CRITICAL)
+After selecting the best component for each position, check SnapMagic availability. \
+If a component has NO CAD model on SnapMagic (snapmagic_available=false):
+1. Search for an alternative component with the same specs that DOES have a SnapMagic model.
+2. In the BOM, mark the component with `"needs_cad_decision": true`.
+3. Include the CAD-available alternative in the `"alternatives"` array with a note \
+explaining it has CAD models available.
+4. The user will then decide: keep the original (no CAD, manual work) or switch to \
+the alternative (full CAD).
+This is a hard stop — do NOT silently skip CAD checks or leave snapmagic_available as false \
+without searching for a CAD-available alternative.
+
 ## Error Handling
 - MCP server unreachable: inform user which service is unavailable.
 - Nexar error/quota exceeded: fall back to web search, inform user about reduced data quality.
@@ -92,11 +104,16 @@ Always return JSON with exactly one of three statuses.
         "snapmagic_url": "<str or null>",
         "snapmagic_available": <bool>,
         "snapmagic_formats": ["<str>"],
+        "needs_cad_decision": <bool>,
         "mpn_confidence": "<verified|searched>",
         "verified": <bool>,
         "warnings": ["<str>"],
         "alternatives": [
-          {"mpn": "<str>", "manufacturer": "<str>", "unit_price": <float>, "stock": <int>}
+          {
+            "mpn": "<str>", "manufacturer": "<str>", "unit_price": <float>, "stock": <int>,
+            "snapmagic_available": <bool>, "snapmagic_url": "<str or null>",
+            "note": "<str, e.g. 'CAD models available on SnapEDA'>"
+          }
         ]
       }
     ],

@@ -11,7 +11,10 @@ interface Alternative {
   mpn: string;
   manufacturer: string;
   unit_price: number;
+  stock?: number;
   note: string;
+  snapmagic_available?: boolean;
+  snapmagic_url?: string;
 }
 
 interface Component {
@@ -33,6 +36,7 @@ interface Component {
   snapmagic_url?: string;
   snapmagic_available: boolean;
   snapmagic_formats?: string[];
+  needs_cad_decision?: boolean;
   mpn_confidence?: string;
   verified?: boolean;
   warnings: string[];
@@ -204,6 +208,13 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
                 />
               </svg>
             </a>
+          ) : comp.needs_cad_decision ? (
+            <span
+              className="text-warning cursor-help text-xs font-medium"
+              title="No CAD model — check alternatives for CAD-available options"
+            >
+              !!
+            </span>
           ) : (
             <span className="text-text-muted">—</span>
           )}
@@ -248,7 +259,7 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
         comp.alternatives.map((alt, i) => (
           <tr
             key={`${comp.ref}-alt-${i}`}
-            className="bg-bg-tertiary/50 border-b border-border/30"
+            className={`border-b border-border/30 ${alt.snapmagic_available ? "bg-success/5" : "bg-bg-tertiary/50"}`}
           >
             <td className="px-3 py-2 text-xs text-text-muted pl-8">Alt</td>
             <td className="px-3 py-2 text-xs font-mono text-text-secondary">
@@ -259,6 +270,9 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
             </td>
             <td colSpan={3} className="px-3 py-2 text-xs text-text-muted italic">
               {alt.note}
+              {alt.snapmagic_available && (
+                <span className="ml-2 text-success font-medium not-italic">CAD</span>
+              )}
             </td>
             <td className="px-3 py-2 text-xs text-text-secondary text-right">
               {formatPrice(alt.unit_price, currency)}
