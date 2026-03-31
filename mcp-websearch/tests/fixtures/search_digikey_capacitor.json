@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-def456",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"results\": [{\"mpn\": \"GRM155R71C104KA88D\", \"manufacturer\": \"Murata\", \"description\": \"100nF 16V X7R 0402 MLCC Capacitor\", \"price\": \"0.01\", \"stock\": \"982000\", \"url\": \"https://www.digikey.com/en/products/detail/murata/GRM155R71C104KA88D/1234567\"}, {\"mpn\": \"CL05B104KO5NNNC\", \"manufacturer\": \"Samsung Electro-Mechanics\", \"description\": \"100nF 16V X5R 0402 MLCC Capacitor\", \"price\": \"0.008\", \"stock\": \"500000\", \"url\": \"https://www.digikey.com/en/products/detail/samsung/CL05B104KO5NNNC/7654321\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-mno345",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"results\": [{\"mpn\": \"LQH32CN100K53L\", \"manufacturer\": \"Murata\", \"description\": \"10uH 10% 1210 SMD Inductor, 450mA\", \"price\": \"0.35\", \"stock\": \"12500\", \"url\": \"https://www.farnell.com/datasheets/murata/LQH32CN100K53L.html\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

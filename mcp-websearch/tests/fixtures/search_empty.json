@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-stu901",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"results\": []}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}
