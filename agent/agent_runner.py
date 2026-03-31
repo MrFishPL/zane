@@ -559,8 +559,9 @@ class AgentRunner:
             parsed = json.loads(content)
             if isinstance(parsed, dict) and "status" in parsed:
                 return parsed
+            log.warning("parse_final_answer.missing_status", keys=list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__)
         except json.JSONDecodeError:
-            pass
+            log.warning("parse_final_answer.invalid_json", content_preview=content[:200])
 
         # If the LLM didn't return valid JSON, wrap it
         return {

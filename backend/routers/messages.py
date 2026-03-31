@@ -57,6 +57,9 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
                     error=str(exc),
                 )
 
+    # Get conversation history BEFORE adding the new message (avoids duplication)
+    messages = supabase_client.get_messages(conversation_id)
+
     # Save user message
     message = supabase_client.create_message(
         conversation_id,
@@ -64,9 +67,6 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
         content=body.content,
         attachments=resolved_attachments if resolved_attachments else None,
     )
-
-    # Get conversation history for the agent
-    messages = supabase_client.get_messages(conversation_id)
 
     # Submit task
     task = await task_manager.submit_task(

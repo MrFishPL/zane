@@ -95,7 +95,7 @@ def prepare_conversation_history(messages: list[dict]) -> list[dict]:
         attachments = msg.get("attachments")
         if attachments:
             entry["attachments"] = [
-                {"path": att.get("path", ""), "name": att.get("name", "")}
+                {"path": att.get("path", ""), "filename": att.get("filename") or att.get("name", "")}
                 for att in attachments
                 if att.get("path")
             ]
