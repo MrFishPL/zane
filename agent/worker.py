@@ -261,13 +261,21 @@ class AgentWorker:
         enriched: list[dict[str, Any]] = []
 
         for att in attachments:
-            att_type = att.get("type", "")
             path = att.get("path", "")
+            # Infer type from extension if not explicitly set
+            att_type = att.get("type", "")
+            if not att_type and path:
+                ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+                if ext == "pdf":
+                    att_type = "pdf"
+                elif ext in ("png", "jpg", "jpeg", "webp"):
+                    att_type = "image"
 
             if att_type == "pdf":
                 # Render PDF pages to images
                 try:
-                    pages = await router.call_tool("render_pdf_pages", {"pdf_path": path})
+                    minio_path = path if path.startswith("minio://") else f"minio://{path}"
+                    pages = await router.call_tool("render_pdf_pages", {"pdf_path": minio_path})
                     if isinstance(pages, str):
                         pages = json.loads(pages)
                     if isinstance(pages, list):
@@ -283,9 +291,16 @@ class AgentWorker:
 
             elif att_type == "image":
                 try:
-                    b64 = await router.call_tool(
-                        "get_image_base64", {"image_path": path}
+                    minio_path = path if path.startswith("minio://") else f"minio://{path}"
+                    raw = await router.call_tool(
+                        "get_image_base64", {"image_path": minio_path}
                     )
+                    # MCP returns JSON string '{"base64": "..."}' — extract the actual data
+                    if isinstance(raw, str):
+                        parsed = json.loads(raw)
+                        b64 = parsed.get("base64", "")
+                    else:
+                        b64 = raw
                     enriched.append({"type": "image", "path": path, "base64": b64})
                 except Exception:
                     log.error("image_base64_failed", path=path, exc_info=True)
