@@ -120,8 +120,8 @@ class AgentWorker:
                     QUEUE_TASKS,
                     QUEUE_PROCESSING,
                     timeout=1,
-                    wherefrom="LEFT",
-                    whereto="RIGHT",
+                    src="LEFT",
+                    dest="RIGHT",
                 )
             except Exception as exc:
                 log.error("redis_blmove_error", error=str(exc), exc_info=True)

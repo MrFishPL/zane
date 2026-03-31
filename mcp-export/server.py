@@ -24,7 +24,7 @@ structlog.configure(
 
 log = structlog.get_logger()
 
-mcp = FastMCP("mcp-export")
+mcp = FastMCP("mcp-export", host="0.0.0.0", port=8005)
 
 _minio: MinIOClient | None = None
 
@@ -181,4 +181,4 @@ async def health(request: Request) -> JSONResponse:
 
 if __name__ == "__main__":
     log.info("mcp_export.starting", port=8005)
-    mcp.run(transport="sse", host="0.0.0.0", port=8005)
+    mcp.run(transport="sse")

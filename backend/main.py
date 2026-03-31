@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import structlog
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import conversations, messages, upload, files
@@ -106,7 +106,7 @@ app = FastAPI(title="Zane Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:8000", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -147,7 +147,7 @@ app.include_router(files.router)
 # ---------------------------------------------------------------------------
 
 @app.websocket("/ws/conversations/{conversation_id}")
-async def ws_route(websocket, conversation_id: str):
+async def ws_route(websocket: WebSocket, conversation_id: str):
     await websocket_endpoint(websocket, conversation_id)
 
 

@@ -17,7 +17,7 @@ structlog.configure(
 
 log = structlog.get_logger()
 
-mcp = FastMCP("mcp-websearch")
+mcp = FastMCP("mcp-websearch", host="0.0.0.0", port=8004)
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -65,4 +65,4 @@ async def fetch_product_page(url: str) -> dict:
 
 if __name__ == "__main__":
     log.info("server_starting", service="mcp-websearch", port=8004)
-    mcp.run(transport="sse", host="0.0.0.0", port=8004)
+    mcp.run(transport="sse")

@@ -30,22 +30,21 @@ class FakeRedis:
 
     async def blmove(
         self,
-        src: str,
-        dst: str,
+        first_list: str,
+        second_list: str,
         timeout: int = 0,
-        *,
-        wherefrom: str = "LEFT",
-        whereto: str = "RIGHT",
+        src: str = "LEFT",
+        dest: str = "RIGHT",
     ) -> str | None:
-        src_list = self.lists.get(src, [])
+        src_list = self.lists.get(first_list, [])
         if not src_list:
             return None
-        if wherefrom == "LEFT":
+        if src == "LEFT":
             item = src_list.pop(0)
         else:
             item = src_list.pop()
-        dst_list = self.lists.setdefault(dst, [])
-        if whereto == "RIGHT":
+        dst_list = self.lists.setdefault(second_list, [])
+        if dest == "RIGHT":
             dst_list.append(item)
         else:
             dst_list.insert(0, item)

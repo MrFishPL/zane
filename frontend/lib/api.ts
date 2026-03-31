@@ -16,7 +16,7 @@ export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string | Record<string, unknown>; // JSON for assistant, string for user
-  attachments: string[];
+  attachments: (string | { path?: string; filename?: string })[];
   created_at: string;
 }
 

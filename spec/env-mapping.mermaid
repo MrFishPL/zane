@@ -1,0 +1,40 @@
+graph LR
+    subgraph env[".env"]
+        E1["OPENAI_API_KEY"]
+        E2["NEXAR_CLIENT_ID"]
+        E3["NEXAR_CLIENT_SECRET"]
+        E4["SUPABASE_URL"]
+        E5["SUPABASE_KEY"]
+        E6["REDIS_URL"]
+        E7["LITELLM_BASE_URL"]
+        E8["MINIO_ENDPOINT"]
+        E9["MINIO_ROOT_USER"]
+        E10["MINIO_ROOT_PASSWORD"]
+        E11["LOKI_URL"]
+        E12["AGENT_MAX_CONCURRENT_TASKS"]
+    end
+
+    E1 --> LITELLM["litellm-proxy"]
+    E2 --> MCP_NEXAR["mcp-nexar"]
+    E3 --> MCP_NEXAR
+    E4 --> BACKEND["backend"]
+    E5 --> BACKEND
+    E6 --> BACKEND
+    E6 --> AGENT["agent"]
+    E7 --> AGENT
+    E7 --> BACKEND
+    E7 --> MCP_SNAP["mcp-snapmagic"]
+    E7 --> MCP_WEB["mcp-websearch"]
+    E8 --> BACKEND
+    E8 --> MCP_DOCS["mcp-documents"]
+    E8 --> MCP_EXPORT["mcp-export"]
+    E9 --> MINIO["minio"]
+    E9 --> BACKEND
+    E9 --> MCP_DOCS
+    E9 --> MCP_EXPORT
+    E10 --> MINIO
+    E10 --> BACKEND
+    E10 --> MCP_DOCS
+    E10 --> MCP_EXPORT
+    E11 -.->|"Docker logging driver"| ALL["all containers"]
+    E12 --> AGENT

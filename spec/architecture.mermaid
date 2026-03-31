@@ -1,0 +1,66 @@
+graph TB
+    subgraph external["External services"]
+        OPENAI["OpenAI API<br/><i>GPT-5.4 + GPT-4o-mini</i>"]
+        SUPABASE["Supabase<br/><i>PostgreSQL</i>"]
+        NEXAR_API["Nexar API<br/><i>GraphQL, OAuth2</i>"]
+    end
+
+    subgraph docker["Docker network: app-network"]
+        subgraph ui["User-facing"]
+            FRONTEND["frontend<br/><i>Next.js :3000</i>"]
+        end
+
+        subgraph core["Core services"]
+            BACKEND["backend<br/><i>FastAPI :8000</i>"]
+            AGENT["agent<br/><i>Agent SDK worker</i>"]
+            LITELLM["litellm-proxy<br/><i>LiteLLM :4000</i>"]
+        end
+
+        subgraph infra["Infrastructure"]
+            REDIS["redis<br/><i>Redis 7 :6379</i>"]
+            MINIO["minio<br/><i>MinIO :9000/:9001</i>"]
+        end
+
+        subgraph observability["Observability"]
+            LOKI["loki<br/><i>Grafana Loki :3100</i>"]
+            GRAFANA["grafana<br/><i>Grafana :3001</i>"]
+        end
+
+        subgraph mcp["MCP servers · HTTP+SSE transport"]
+            MCP_NEXAR["mcp-nexar<br/>:8001"]
+            MCP_SNAP["mcp-snapmagic<br/>:8002"]
+            MCP_DOCS["mcp-documents<br/>:8003"]
+            MCP_WEB["mcp-websearch<br/>:8004"]
+            MCP_EXPORT["mcp-export<br/>:8005"]
+        end
+    end
+
+    USER((User)) -->|"HTTP :3000"| FRONTEND
+    FRONTEND -->|"REST API"| BACKEND
+    FRONTEND <-->|"WebSocket<br/>status updates"| BACKEND
+
+    BACKEND -->|"LPUSH task"| REDIS
+    BACKEND -->|"SUBSCRIBE status"| REDIS
+    BACKEND -->|"title generation<br/>(gpt-4o-mini)"| LITELLM
+    AGENT -->|"BLMOVE task<br/>LREM on done"| REDIS
+    AGENT -->|"PUBLISH status"| REDIS
+
+    BACKEND -->|"CRUD"| SUPABASE
+    BACKEND -->|"upload + serve files"| MINIO
+
+    AGENT -->|"Anthropic format"| LITELLM
+    LITELLM -->|"OpenAI format"| OPENAI
+
+    AGENT -->|"MCP tools"| MCP_NEXAR
+    AGENT -->|"MCP tools"| MCP_SNAP
+    AGENT -->|"MCP tools incl.<br/>get_image_base64"| MCP_DOCS
+    AGENT -->|"MCP tools"| MCP_WEB
+    AGENT -->|"MCP tools"| MCP_EXPORT
+
+    MCP_NEXAR -->|"GraphQL + OAuth2"| NEXAR_API
+    MCP_SNAP -->|"web_search tool"| LITELLM
+    MCP_WEB -->|"web_search tool"| LITELLM
+    MCP_DOCS -->|"read/write"| MINIO
+    MCP_EXPORT -->|"write exports"| MINIO
+
+    GRAFANA -->|"query logs"| LOKI

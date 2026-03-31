@@ -21,7 +21,7 @@ structlog.configure(
 
 log = structlog.get_logger()
 
-mcp = FastMCP("mcp-nexar")
+mcp = FastMCP("mcp-nexar", host="0.0.0.0", port=8001)
 
 client = NexarClient(
     client_id=os.environ.get("NEXAR_CLIENT_ID", ""),
@@ -135,4 +135,4 @@ async def health(request: Request) -> JSONResponse:
 
 if __name__ == "__main__":
     log.info("mcp_nexar.starting", port=8001)
-    mcp.run(transport="sse", host="0.0.0.0", port=8001)
+    mcp.run(transport="sse")

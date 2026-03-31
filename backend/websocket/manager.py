@@ -8,7 +8,7 @@ import json
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
-from services import redis_client, supabase_client
+from services import redis_client, supabase_client, task_manager
 
 log = structlog.get_logger()
 
@@ -105,6 +105,29 @@ class ConnectionManager:
                         data = json.loads(message["data"])
                     except (json.JSONDecodeError, TypeError):
                         data = {"raw": message["data"]}
+
+                    # Persist results/status/errors via task_manager
+                    msg_type = data.get("type")
+                    task_id = data.get("task_id")
+                    if task_id and msg_type in ("status", "result", "error"):
+                        update = {"type": msg_type}
+                        if msg_type == "result":
+                            update["content"] = data.get("data", "")
+                        elif msg_type == "status":
+                            update["current_status"] = data.get("text", "")
+                        elif msg_type == "error":
+                            update["error"] = data.get("error", "")
+                        try:
+                            await task_manager.handle_status_update(
+                                task_id, conversation_id, update
+                            )
+                        except Exception as exc:
+                            log.error(
+                                "ws.task_update_failed",
+                                task_id=task_id,
+                                error=str(exc),
+                            )
+
                     await self.broadcast(conversation_id, data)
 
         except asyncio.CancelledError:

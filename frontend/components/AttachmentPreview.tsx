@@ -5,7 +5,12 @@ import { getFileUrl } from "@/lib/api";
 import ImageLightbox from "./ImageLightbox";
 
 interface AttachmentPreviewProps {
-  paths: string[];
+  paths: (string | { path?: string; filename?: string })[];
+}
+
+function resolvePath(item: string | { path?: string; filename?: string }): string {
+  if (typeof item === "string") return item;
+  return item.path || "";
 }
 
 function isImage(path: string): boolean {
@@ -31,7 +36,9 @@ export default function AttachmentPreview({
   return (
     <>
       <div className="flex flex-wrap gap-2 mt-2">
-        {paths.map((path, i) => {
+        {paths.map((item, i) => {
+          const path = resolvePath(item);
+          if (!path) return null;
           const url = getFileUrl(path);
 
           if (isImage(path)) {

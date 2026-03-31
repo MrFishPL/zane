@@ -21,7 +21,7 @@ structlog.configure(
 
 log = structlog.get_logger()
 
-mcp = FastMCP("mcp-snapmagic")
+mcp = FastMCP("mcp-snapmagic", host="0.0.0.0", port=8002)
 
 client = SnapMagicSearchClient(
     base_url=os.environ.get("LITELLM_BASE_URL"),
@@ -167,4 +167,4 @@ async def health(request: Request) -> JSONResponse:
 
 if __name__ == "__main__":
     log.info("mcp_snapmagic.starting", port=8002)
-    mcp.run(transport="sse", host="0.0.0.0", port=8002)
+    mcp.run(transport="sse")

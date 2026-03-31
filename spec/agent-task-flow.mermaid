@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant U as User/Frontend
+    participant B as Backend
+    participant R as Redis
+    participant A as Agent Worker
+    participant M as MCP Servers
+    participant L as LiteLLM/GPT-5.4
+
+    U->>B: POST /conversations/{id}/messages
+    B->>B: Save user message to Supabase
+    B->>B: Create agent_tasks row (running)
+    B->>R: LPUSH agent:tasks {task}
+    B-->>U: 202 Accepted
+
+    Note over U,B: Frontend opens WebSocket
+    U->>B: WS /ws/conversations/{id}
+    B->>R: SUBSCRIBE agent:status:{conv_id}
+
+    A->>R: BLMOVE agent:tasks agent:processing
+    R-->>A: {task payload}
+
+    loop Agent processing
+        A->>M: MCP tool call (HTTP+SSE)
+        M-->>A: tool result
+        A->>R: PUBLISH status update
+        R-->>B: status update
+        B->>B: Update agent_tasks.current_status
+        B-->>U: WS push status text
+        A->>L: LLM query (with base64 vision)
+        L-->>A: LLM response
+    end
+
+    A->>R: PUBLISH final result
+    A->>R: LREM agent:processing {task}
+    R-->>B: result
+    B->>B: Save to messages + agent_tasks=completed
+    B-->>U: WS push final JSON
