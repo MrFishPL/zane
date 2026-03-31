@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"results\": [{\"mpn\": \"STM32F103C8T6\", \"manufacturer\": \"STMicroelectronics\", \"description\": \"ARM Cortex-M3 MCU, 64KB Flash, 20KB SRAM, 72MHz\", \"price\": \"2.45\", \"stock\": \"15230\", \"url\": \"https://www.mouser.com/ProductDetail/STMicroelectronics/STM32F103C8T6\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

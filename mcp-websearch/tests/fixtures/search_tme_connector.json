@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-jkl012",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"results\": [{\"mpn\": \"B2B-XH-A(LF)(SN)\", \"manufacturer\": \"JST\", \"description\": \"2-pin XH series connector, 2.5mm pitch, through-hole\", \"price\": \"0.15\", \"stock\": \"28000\", \"url\": \"https://www.tme.eu/en/details/b2b-xh-a_lf__sn_/\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-pqr678",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"mpn\": \"STM32F103C8T6\", \"manufacturer\": \"STMicroelectronics\", \"description\": \"ARM Cortex-M3 MCU, 64KB Flash, 20KB SRAM, 72MHz, LQFP-48\", \"price\": \"2.45\", \"stock\": \"15230\", \"url\": \"https://www.mouser.com/ProductDetail/STMicroelectronics/STM32F103C8T6\", \"specs\": {\"core\": \"ARM Cortex-M3\", \"flash\": \"64KB\", \"ram\": \"20KB\", \"frequency\": \"72MHz\", \"package\": \"LQFP-48\", \"voltage\": \"2.0V - 3.6V\"}}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

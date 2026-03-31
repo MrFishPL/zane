@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-ghi789",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"results\": [{\"mpn\": \"0402WGF1000TCE\", \"manufacturer\": \"UNI-ROYAL\", \"description\": \"100 Ohm 1% 0402 Chip Resistor\", \"price\": \"0.002\", \"stock\": \"4500000\", \"url\": \"https://www.lcsc.com/product-detail/0402WGF1000TCE.html\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}
