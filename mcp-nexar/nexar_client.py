@@ -21,10 +21,8 @@ query SearchParts($query: String!, $limit: Int!) {
         mpn
         manufacturer { name }
         shortDescription
-        specs { attribute { name } displayValue }
-        bestDatasheet { url }
         medianPrice1000 { price currency }
-        sellers(orderBy: {field: PRICE, direction: ASC}, first: 5) {
+        sellers {
           company { name }
           offers {
             inventoryLevel
@@ -92,9 +90,13 @@ class NexarClient:
             )
 
         data = response.json()
-        if "errors" in data:
+        if "errors" in data and "data" not in data:
+            # Only raise if there's no usable data at all
             log.error("nexar_client.graphql_errors", errors=data["errors"])
             raise RuntimeError(f"Nexar GraphQL errors: {data['errors']}")
+        if "errors" in data:
+            # Partial errors (e.g. unauthorized fields) — log but continue with available data
+            log.warning("nexar_client.partial_errors", count=len(data["errors"]))
 
         return data["data"]
 
