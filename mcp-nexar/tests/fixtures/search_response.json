@@ -1,0 +1,108 @@
+{
+  "data": {
+    "supSearch": {
+      "hits": 1234,
+      "results": [
+        {
+          "part": {
+            "mpn": "RC0603FR-073RL",
+            "manufacturer": { "name": "Yageo" },
+            "shortDescription": "3 Ohms 0603 1% 0.1W Thick Film Resistor",
+            "specs": [
+              { "attribute": { "name": "Resistance" }, "displayValue": "3 Ohms" },
+              { "attribute": { "name": "Tolerance" }, "displayValue": "1%" },
+              { "attribute": { "name": "Power (Watts)" }, "displayValue": "0.1W" },
+              { "attribute": { "name": "Package / Case" }, "displayValue": "0603 (1608 Metric)" },
+              { "attribute": { "name": "Temperature Coefficient" }, "displayValue": "100ppm/K" },
+              { "attribute": { "name": "Mounting Type" }, "displayValue": "Surface Mount" },
+              { "attribute": { "name": "Lifecycle Status" }, "displayValue": "Active" },
+              { "attribute": { "name": "Series" }, "displayValue": "RC" },
+              { "attribute": { "name": "Composition" }, "displayValue": "Thick Film" }
+            ],
+            "bestDatasheet": { "url": "https://www.yageo.com/upload/media/product/products/datasheet/rchip/pyu-rc_group_51_rohs_2.pdf" },
+            "medianPrice1000": { "price": 0.0023, "currency": "USD" },
+            "sellers": [
+              {
+                "company": { "name": "DigiKey" },
+                "offers": [
+                  {
+                    "inventoryLevel": 450000,
+                    "prices": [
+                      { "quantity": 1, "price": 0.01, "currency": "USD" },
+                      { "quantity": 10, "price": 0.008, "currency": "USD" },
+                      { "quantity": 100, "price": 0.005, "currency": "USD" },
+                      { "quantity": 1000, "price": 0.0023, "currency": "USD" }
+                    ],
+                    "clickUrl": "https://www.digikey.com/en/products/detail/yageo/RC0603FR-073RL/123456"
+                  }
+                ]
+              },
+              {
+                "company": { "name": "Mouser" },
+                "offers": [
+                  {
+                    "inventoryLevel": 320000,
+                    "prices": [
+                      { "quantity": 1, "price": 0.012, "currency": "USD" },
+                      { "quantity": 10, "price": 0.009, "currency": "USD" },
+                      { "quantity": 100, "price": 0.006, "currency": "USD" }
+                    ],
+                    "clickUrl": "https://www.mouser.com/ProductDetail/Yageo/RC0603FR-073RL?qs=test"
+                  }
+                ]
+              },
+              {
+                "company": { "name": "LCSC" },
+                "offers": [
+                  {
+                    "inventoryLevel": 1500000,
+                    "prices": [
+                      { "quantity": 1, "price": 0.003, "currency": "USD" },
+                      { "quantity": 100, "price": 0.002, "currency": "USD" }
+                    ],
+                    "clickUrl": "https://www.lcsc.com/product-detail/test.html"
+                  }
+                ]
+              }
+            ],
+            "v3uid": "abc123def456",
+            "counts": null
+          }
+        },
+        {
+          "part": {
+            "mpn": "CRCW06033R00FKEA",
+            "manufacturer": { "name": "Vishay Dale" },
+            "shortDescription": "3 Ohms 0603 1% 0.1W Thick Film Resistor",
+            "specs": [
+              { "attribute": { "name": "Resistance" }, "displayValue": "3 Ohms" },
+              { "attribute": { "name": "Tolerance" }, "displayValue": "1%" },
+              { "attribute": { "name": "Power (Watts)" }, "displayValue": "0.1W" },
+              { "attribute": { "name": "Package / Case" }, "displayValue": "0603 (1608 Metric)" },
+              { "attribute": { "name": "Lifecycle Status" }, "displayValue": "Active" }
+            ],
+            "bestDatasheet": { "url": "https://www.vishay.com/docs/20035/dcrcwe3.pdf" },
+            "medianPrice1000": { "price": 0.0035, "currency": "USD" },
+            "sellers": [
+              {
+                "company": { "name": "DigiKey" },
+                "offers": [
+                  {
+                    "inventoryLevel": 200000,
+                    "prices": [
+                      { "quantity": 1, "price": 0.015, "currency": "USD" },
+                      { "quantity": 100, "price": 0.008, "currency": "USD" }
+                    ],
+                    "clickUrl": "https://www.digikey.com/en/products/detail/vishay/CRCW06033R00FKEA/789012"
+                  }
+                ]
+              }
+            ],
+            "v3uid": "def789ghi012",
+            "counts": null
+          }
+        }
+      ]
+    }
+  }
+}
