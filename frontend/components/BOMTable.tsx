@@ -160,17 +160,21 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
 
         {/* Lifecycle */}
         <td className="px-3 py-2.5 text-sm whitespace-nowrap">
-          <span
-            className={
-              comp.lifecycle === "Active"
-                ? "text-success"
-                : comp.lifecycle === "NRND" || comp.lifecycle === "Last Time Buy"
-                ? "text-warning"
-                : "text-text-secondary"
-            }
-          >
-            {comp.lifecycle}
-          </span>
+          {comp.lifecycle && comp.lifecycle !== "unknown" && comp.lifecycle !== "Unknown" ? (
+            <span
+              className={
+                comp.lifecycle === "Active"
+                  ? "text-success"
+                  : comp.lifecycle === "NRND" || comp.lifecycle === "Last Time Buy"
+                  ? "text-warning"
+                  : "text-text-secondary"
+              }
+            >
+              {comp.lifecycle}
+            </span>
+          ) : (
+            <span className="text-text-muted">—</span>
+          )}
         </td>
 
         {/* Distributor */}
@@ -201,15 +205,7 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
               </svg>
             </a>
           ) : (
-            <span className="text-text-muted">
-              <svg className="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </span>
+            <span className="text-text-muted">—</span>
           )}
         </td>
 
@@ -325,13 +321,21 @@ export default function BOMTable({
             Not Sourced ({notSourced.length})
           </h4>
           <ul className="space-y-1">
-            {notSourced.map((item, i) => (
-              <li key={i} className="text-sm text-text-secondary">
-                <span className="text-text-primary">{item.item}</span>
-                {" — "}
-                <span className="text-text-muted">{item.reason}</span>
-              </li>
-            ))}
+            {notSourced.map((ns, i) => {
+              const label = typeof ns === "string" ? ns : (ns.item || ns.reason || JSON.stringify(ns));
+              const reason = typeof ns === "object" && ns.reason && ns.item ? ns.reason : null;
+              return (
+                <li key={i} className="text-sm text-text-secondary">
+                  <span className="text-text-primary">{label}</span>
+                  {reason && (
+                    <>
+                      {" — "}
+                      <span className="text-text-muted">{reason}</span>
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

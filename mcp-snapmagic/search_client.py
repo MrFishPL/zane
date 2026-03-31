@@ -113,11 +113,11 @@ class SnapMagicSearchClient:
         self._timeout = timeout or REQUEST_TIMEOUT
 
     async def _call_llm_with_tools(self, mpn: str) -> dict[str, Any]:
-        """Call LLM with web_search tool support."""
+        """Call LLM with web_search_options for real web access."""
         payload = {
             "model": self._model,
             "messages": _build_messages(mpn),
-            "tools": _build_tools(),
+            "web_search_options": {"search_context_size": "medium"},
             "temperature": 0,
         }
 
@@ -131,7 +131,7 @@ class SnapMagicSearchClient:
             return resp.json()
 
     async def _call_llm_simple(self, mpn: str) -> dict[str, Any]:
-        """Fallback: call LLM without tools (uses training data only)."""
+        """Fallback: call LLM without web search (uses training data only)."""
         payload = {
             "model": self._model,
             "messages": _build_messages(mpn),
