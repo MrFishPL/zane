@@ -168,7 +168,7 @@ class AgentWorker:
             task_id = task.get("task_id", str(uuid.uuid4()))
             conversation_id = task.get("conversation_id", "unknown")
             user_message = task.get("message", "")
-            history = task.get("history", [])
+            history = task.get("conversation_history", []) or task.get("history", [])
             attachments = task.get("attachments", [])
 
             log.info(
