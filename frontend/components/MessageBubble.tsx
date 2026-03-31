@@ -77,13 +77,13 @@ function ClarificationView({ data, messageTxt }: { data: JsonData; messageTxt: s
 
       {data?.questions && data.questions.length > 0 && (
         <div className="space-y-2">
-          {data.questions.map((q: JsonData) => (
+          {data.questions.map((q: JsonData, idx: number) => (
             <div
-              key={q.id}
+              key={q.id || idx}
               className="flex gap-3 items-start bg-bg-tertiary/50 rounded-lg p-3"
             >
               <span className="shrink-0 w-6 h-6 rounded-full bg-accent/20 text-accent text-xs font-medium flex items-center justify-center">
-                {q.id}
+                {idx + 1}
               </span>
               <div>
                 <p className="text-sm text-text-primary">{q.question}</p>
