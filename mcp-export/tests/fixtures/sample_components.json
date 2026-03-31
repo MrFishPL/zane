@@ -1,0 +1,29 @@
+[
+  {
+    "ref": "U1",
+    "mpn": "LM317T",
+    "manufacturer": "STMicroelectronics",
+    "description": "Adjustable voltage regulator",
+    "package": "TO-220",
+    "qty_per_unit": 1,
+    "datasheet_url": "https://www.st.com/resource/en/datasheet/lm317.pdf"
+  },
+  {
+    "ref": "R1",
+    "mpn": "RC0603FR-07240RL",
+    "manufacturer": "Yageo",
+    "description": "240 ohm resistor 0603 1%",
+    "package": "0603",
+    "qty_per_unit": 2,
+    "datasheet_url": "https://www.yageo.com/upload/media/product/products/datasheet/rchip/PYu-RC_Group_51_RoHS_L_12.pdf"
+  },
+  {
+    "ref": "C1",
+    "mpn": "GRM188R71C104KA01D",
+    "manufacturer": "Murata",
+    "description": "100nF ceramic capacitor 0603 16V X7R",
+    "package": "0603",
+    "qty_per_unit": 3,
+    "datasheet_url": "https://search.murata.co.jp/Ceramy/image/img/A01X/G101/ENG/GRM188R71C104KA01-01A.pdf"
+  }
+]

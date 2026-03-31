@@ -1,0 +1,11 @@
+[
+  {
+    "ref": "U1",
+    "mpn": "STM32F103C8T6",
+    "manufacturer": "STMicroelectronics",
+    "description": "ARM Cortex-M3 microcontroller 64KB Flash",
+    "package": "LQFP-48",
+    "qty_per_unit": 1,
+    "datasheet_url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf"
+  }
+]
