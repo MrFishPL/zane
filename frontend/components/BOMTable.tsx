@@ -214,18 +214,14 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
         </td>
 
         {/* Warnings */}
-        <td className="px-3 py-2.5 text-sm">
+        <td className="px-3 py-2.5 text-sm max-w-[120px]">
           {comp.warnings && comp.warnings.length > 0 && (
-            <div className="flex flex-col gap-0.5">
-              {comp.warnings.map((w, i) => (
-                <span
-                  key={i}
-                  className="text-xs text-warning bg-warning/10 rounded px-1.5 py-0.5 inline-block"
-                >
-                  {w}
-                </span>
-              ))}
-            </div>
+            <span
+              className="text-xs text-warning cursor-help"
+              title={comp.warnings.join('\n')}
+            >
+              {comp.warnings.length} warning{comp.warnings.length > 1 ? 's' : ''}
+            </span>
           )}
         </td>
 
@@ -292,7 +288,7 @@ export default function BOMTable({
     <div className="space-y-4">
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-left">
+        <table className="w-full text-left table-auto" style={{ minWidth: '900px' }}>
           <thead>
             <tr className="bg-bg-tertiary border-b border-border">
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Ref</th>
