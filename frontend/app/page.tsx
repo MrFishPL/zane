@@ -162,15 +162,6 @@ export default function Home() {
 
       // Agent completed with result
       if (data.type === "result" || data.type === "message") {
-        const newMsg: Message = data.message || (data as unknown as Message);
-        if (newMsg.id && newMsg.role) {
-          setMessages((prev) => {
-            // Avoid duplicates
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        }
-
         setAgentStatus(IDLE_STATUS);
 
         // Update conversation status in sidebar
@@ -179,6 +170,13 @@ export default function Home() {
             c.id === activeId ? { ...c, agent_status: "completed" } : c
           )
         );
+
+        // Re-fetch messages from the API to get the saved assistant response
+        if (activeId) {
+          getConversation(activeId)
+            .then((detail) => setMessages(detail.messages || []))
+            .catch(() => {});
+        }
       }
 
       // Agent error
