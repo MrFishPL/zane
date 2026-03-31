@@ -382,7 +382,13 @@ class AgentRunner:
 
         # Append prior conversation turns
         if history:
-            messages.extend(history)
+            for h in history:
+                role = h.get("role", "user")
+                # History uses "message" key, OpenAI API needs "content"
+                content = h.get("content") or h.get("message", "")
+                if isinstance(content, dict):
+                    content = content.get("message", "") or str(content)
+                messages.append({"role": role, "content": content or "..."})
 
         # Build the current user turn -- may include image references
         content_parts: list[dict[str, Any]] = []
