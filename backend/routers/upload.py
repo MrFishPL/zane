@@ -82,8 +82,11 @@ async def upload_file(
         content_type=content_type,
     )
 
+    # Strip minio:// prefix so paths are clean for the frontend
+    clean_path = full_path.removeprefix("minio://")
+
     return {
-        "path": full_path,
+        "path": clean_path,
         "upload_id": upload_id,
         "filename": filename,
         "size": size,

@@ -73,7 +73,7 @@ export default function ChatSidebar({
           fixed lg:static inset-y-0 left-0 z-40
           flex flex-col bg-bg-secondary border-r border-border
           transition-all duration-200 ease-out
-          ${collapsed ? "w-0 -translate-x-full lg:w-0 lg:-translate-x-full" : "w-72"}
+          ${collapsed ? "-translate-x-full lg:translate-x-0" : ""} w-72
         `}
       >
         {/* Header */}

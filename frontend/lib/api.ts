@@ -105,9 +105,10 @@ export async function sendMessage(
   message: string,
   attachments: string[]
 ): Promise<void> {
+  const attachmentDicts = attachments.map((path) => ({ path }));
   return request<void>(`/api/conversations/${conversationId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ message, attachments }),
+    body: JSON.stringify({ content: message, attachments: attachmentDicts.length > 0 ? attachmentDicts : undefined }),
   });
 }
 
