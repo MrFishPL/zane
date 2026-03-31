@@ -23,9 +23,7 @@ log = structlog.get_logger()
 
 mcp = FastMCP("mcp-snapmagic", host="0.0.0.0", port=8002)
 
-client = SnapMagicSearchClient(
-    base_url=os.environ.get("LITELLM_BASE_URL"),
-)
+client = SnapMagicSearchClient()
 
 VALID_FORMATS = {"kicad", "altium", "eagle", "any"}
 
