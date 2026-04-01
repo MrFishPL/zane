@@ -13,7 +13,7 @@ class ComponentSpec(BaseModel):
     value: str = ""
     package: str = ""
     tolerance: str = ""
-    constraints: dict[str, str] = Field(default_factory=dict)
+    constraints: dict[str, object] = Field(default_factory=dict)
     quantity_per_unit: int = 1
 
 
