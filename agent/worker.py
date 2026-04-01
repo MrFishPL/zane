@@ -52,13 +52,16 @@ class AgentWorker:
         # Start decision listener in background
         decision_task = asyncio.create_task(self._decision_listener(shutdown_event))
 
+        log.info("worker.main_loop_starting")
+
         try:
             while not shutdown_event.is_set():
                 try:
                     result = await self._redis.blmove(
                         "agent:tasks", "agent:processing", 1, "LEFT", "RIGHT",
                     )
-                except Exception:
+                except Exception as e:
+                    log.error("worker.blmove_error", error=str(e)[:200])
                     if shutdown_event.is_set():
                         break
                     await asyncio.sleep(1)
@@ -253,7 +256,7 @@ class AgentWorker:
 
         paused_ids = await self._state_mgr.get_paused_task_ids()
         for task_id in paused_ids:
-            decision = await self._state_mgr.pop_decision(task_id, timeout=0)
+            decision = await self._state_mgr.pop_decision(task_id, timeout=1)
             if decision:
                 asyncio.create_task(self._resume_task(task_id, decision))
             else:
