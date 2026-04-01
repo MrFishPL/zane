@@ -346,8 +346,8 @@ class AgentWorker:
                         log.info("pdf_text_extracted", pages=len(pdf_text_parts),
                                  chars=len(combined_text))
 
-                    # Include max 3 schematic images, resized to save context
-                    for page_path, page_num in schematic_pages[:3]:
+                    # Include max 2 schematic images, resized to save context
+                    for page_path, page_num in schematic_pages[:2]:
                         try:
                             raw_b64 = await router.call_tool(
                                 "get_image_base64", {"image_path": page_path}
@@ -357,16 +357,16 @@ class AgentWorker:
                                 b64 = parsed_b64.get("base64", "")
                             else:
                                 b64 = raw_b64
-                            # Resize to max 1600px wide to stay within context limits
-                            b64 = self._resize_base64(b64, max_width=1600)
+                            # Resize to max 1200px wide to stay within context limits
+                            b64 = self._resize_base64(b64, max_width=1200)
                             enriched.append({"type": "image", "path": page_path, "base64": b64})
                         except Exception:
                             log.error("page_base64_failed", page=page_path, exc_info=True)
 
                     # Build page index so agent can request more via get_image_base64
-                    if len(schematic_pages) > 3:
+                    if len(schematic_pages) > 2:
                         remaining = [f"  Page {pn}: {pp} (use get_image_base64 to load)"
-                                     for pp, pn in schematic_pages[3:]]
+                                     for pp, pn in schematic_pages[2:]]
                         enriched.append({
                             "type": "text",
                             "content": f"[Additional schematic pages available — not loaded to save context]\n"

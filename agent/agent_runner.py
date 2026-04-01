@@ -534,6 +534,19 @@ class AgentRunner:
                         {"error": str(exc), "tool": tool_name}
                     )
 
+                # Truncate large tool results (base64 images) to prevent context overflow
+                if len(result_str) > 50000:
+                    # For image tool results, keep just the summary
+                    try:
+                        parsed_result = json.loads(result_str)
+                        if isinstance(parsed_result, dict) and "base64" in parsed_result:
+                            result_str = json.dumps({
+                                "note": "Image returned successfully. Use the visual content from the image_url above.",
+                                "size_bytes": len(parsed_result.get("base64", "")),
+                            })
+                    except (json.JSONDecodeError, TypeError):
+                        result_str = result_str[:50000] + "...[truncated]"
+
                 messages.append(
                     {
                         "role": "tool",
