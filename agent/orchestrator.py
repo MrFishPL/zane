@@ -19,6 +19,39 @@ from state import StateManager
 
 log = structlog.get_logger()
 
+# User-facing messages in supported languages
+_MESSAGES = {
+    "pl": {
+        "need_schematic": "Potrzebuję schematu (PDF lub obraz) lub opisu potrzebnych komponentów.",
+        "no_components": "Nie udało się zidentyfikować komponentów na schemacie. Czy możesz podać więcej szczegółów?",
+        "decisions_needed": "Niektóre komponenty wymagają Twojej decyzji przed finalizacją BOM.",
+        "found": "Znaleziono {found}/{total} komponentów dla Twojego BOM.",
+    },
+    "en": {
+        "need_schematic": "I need a schematic (PDF or image) or a description of the components you need.",
+        "no_components": "I couldn't identify any components in the schematic. Could you provide more detail?",
+        "decisions_needed": "Some components need your input before I can finalize the BOM.",
+        "found": "Found {found}/{total} components for your BOM.",
+    },
+}
+
+
+def _detect_lang(text: str) -> str:
+    """Simple language detection based on common characters/words."""
+    polish_chars = set("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ")
+    if any(c in polish_chars for c in text):
+        return "pl"
+    polish_words = {"jest", "się", "nie", "dla", "lub", "jak", "przy", "wszystkie", "elementy", "schemacie"}
+    words = set(text.lower().split())
+    if len(words & polish_words) >= 2:
+        return "pl"
+    return "en"
+
+
+def _msg(lang: str, key: str, **kwargs: Any) -> str:
+    msgs = _MESSAGES.get(lang, _MESSAGES["en"])
+    return msgs[key].format(**kwargs)
+
 MAX_SEARCH_CONCURRENCY = 5
 
 
@@ -48,6 +81,8 @@ class Orchestrator:
     ) -> AgentResult:
         """Run the full orchestration pipeline."""
 
+        lang = _detect_lang(message)
+
         # Phase 1: Parse attachments
         await self._publish(conversation_id, task_id, "status", "Analyzing uploaded files...")
         images, texts = await self._phase1_parse_attachments(attachments)
@@ -55,7 +90,7 @@ class Orchestrator:
         if not images and not texts and not message.strip():
             return AgentResult(
                 status="needs_clarification", task_id=task_id,
-                message="I need a schematic (PDF or image) or a description of the components you need.",
+                message=_msg(lang, "need_schematic"),
             )
 
         # Phase 2: Analyze schematic
@@ -70,7 +105,7 @@ class Orchestrator:
         if not components:
             return AgentResult(
                 status="needs_clarification", task_id=task_id,
-                message="I couldn't identify any components in the schematic. Could you provide more detail?",
+                message=_msg(lang, "no_components"),
             )
 
         # Phase 3: Search components
@@ -99,7 +134,7 @@ class Orchestrator:
             )
             return AgentResult(
                 status="decision_required", task_id=task_id,
-                message="Some components need your input before I can finalize the BOM.",
+                message=_msg(lang, "decisions_needed"),
                 decisions=decisions,
                 data={"state": state.model_dump()},
             )
@@ -112,7 +147,7 @@ class Orchestrator:
         await self._publish(conversation_id, task_id, "status", "Generating export files...")
         export_files = await self._phase7_generate_exports(bom, conversation_id)
 
-        return self._build_recommendation(task_id, bom, export_files, production_volume, priority)
+        return self._build_recommendation(task_id, bom, export_files, production_volume, priority, lang)
 
     async def resume(
         self,
@@ -420,7 +455,7 @@ class Orchestrator:
 
     def _build_recommendation(
         self, task_id: str, bom: list[BOMEntry], export_files: list[str],
-        production_volume: int, priority: str,
+        production_volume: int, priority: str, lang: str = "en",
     ) -> AgentResult:
         """Build the final recommendation AgentResult."""
         bom_data = []
@@ -453,7 +488,7 @@ class Orchestrator:
         return AgentResult(
             status="recommendation",
             task_id=task_id,
-            message=f"Found {found}/{total} components for your BOM.",
+            message=_msg(lang, "found", found=found, total=total),
             data={
                 "bom": bom_data,
                 "production_volume": production_volume,

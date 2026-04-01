@@ -23,6 +23,8 @@ interface AssistantContent {
   status?: string;
   message?: string;
   data?: JsonData;
+  decisions?: JsonData[];
+  task_id?: string;
 }
 
 function parseContent(content: string | Record<string, unknown>): AssistantContent | null {
@@ -423,9 +425,9 @@ export default function MessageBubble({ message, conversationId }: MessageBubble
               data={parsed.data}
               messageTxt={parsed.message || ""}
             />
-          ) : parsed.status === "decision_required" && parsed.data ? (
+          ) : parsed.status === "decision_required" && parsed.decisions ? (
             <DecisionRequiredView
-              data={parsed.data}
+              data={parsed}
               messageTxt={parsed.message || ""}
               conversationId={conversationId}
             />
