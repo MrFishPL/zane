@@ -132,11 +132,6 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
           ) : null}
         </td>
 
-        {/* Ref */}
-        <td className="px-3 py-2.5 text-sm font-mono text-text-primary whitespace-nowrap">
-          {comp.ref}
-        </td>
-
         {/* MPN */}
         <td className="px-3 py-2.5 text-sm">
           {comp.mpn ? (
@@ -325,7 +320,6 @@ export default function BOMTable({
           <thead>
             <tr className="bg-bg-tertiary border-b border-border">
               <th className="px-2 py-2.5 w-8" />
-              <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Ref</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">MPN</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Manufacturer</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Description</th>
