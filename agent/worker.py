@@ -299,18 +299,22 @@ class AgentWorker:
                     else:
                         log.warning("unexpected_render_result", result=type(raw_pages).__name__)
                         page_list = []
-                    # Include schematic/diagram pages as images, extract text info from text pages
+                    # Include schematic/diagram pages as images (max 4), extract text from rest
                     text_page_numbers = []
+                    schematic_pages = []
                     for page in page_list:
                         page_path = page if isinstance(page, str) else page.get("minio_path", "")
                         classification = page.get("classification", "") if isinstance(page, dict) else ""
                         page_num = page.get("number", 0) if isinstance(page, dict) else 0
                         if not page_path:
                             continue
-                        # Track text pages but don't include as images
                         if classification == "text":
                             text_page_numbers.append(page_num)
-                            continue
+                        else:
+                            schematic_pages.append((page_path, page_num))
+
+                    # Limit to max 4 schematic images to stay within context window
+                    for page_path, page_num in schematic_pages[:4]:
                         try:
                             raw_b64 = await router.call_tool(
                                 "get_image_base64", {"image_path": page_path}
@@ -343,6 +347,9 @@ class AgentWorker:
                                 log.warning("text_extract_failed", page=pn, exc_info=True)
                         if pdf_text_parts:
                             combined_text = "\n\n".join(pdf_text_parts)
+                            # Truncate to avoid context window overflow
+                            if len(combined_text) > 8000:
+                                combined_text = combined_text[:8000] + "\n[...truncated]"
                             enriched.append({"type": "text", "content": combined_text})
                             log.info("pdf_text_extracted", pages=len(pdf_text_parts),
                                      chars=len(combined_text))
