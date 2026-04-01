@@ -129,6 +129,12 @@ async def handle_status_update(
         )
 
     elif update_type == "result":
+        # Check if task is already completed (avoid duplicate saves)
+        existing = supabase_client.get_agent_task(conversation_id)
+        if existing and existing.get("id") == task_id and existing.get("status") == "completed":
+            log.info("task_manager.result.already_completed", task_id=task_id)
+            return
+
         # Save assistant message
         content = update.get("content", "")
         attachments = update.get("attachments", [])
