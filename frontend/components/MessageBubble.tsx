@@ -46,6 +46,46 @@ function parseContent(content: string | Record<string, unknown>): AssistantConte
 // ---------------------------------------------------------------------------
 
 function RecommendationView({ data, messageTxt }: { data: JsonData; messageTxt: string }) {
+  // Map new orchestrator BOM format to BOMTable's expected format
+  const rawComponents = data.components || data.bom || [];
+  const components = rawComponents.map((c: JsonData) => ({
+    ref: c.ref || "",
+    mpn: c.mpn || "",
+    manufacturer: c.manufacturer || "",
+    description: c.description || "",
+    package: c.package || "",
+    qty_per_unit: c.qty_per_unit ?? c.quantity_per_unit ?? 1,
+    qty_total: c.qty_total ?? c.quantity_total ?? 1,
+    unit_price: c.unit_price ?? 0,
+    stock: c.stock ?? c.total_stock ?? 0,
+    lifecycle: c.lifecycle || "unknown",
+    distributor: c.distributor || "",
+    distributor_url: c.distributor_url || (c.octopart_url ? c.octopart_url : ""),
+    datasheet_url: c.datasheet_url || "",
+    snapmagic_available: c.snapmagic_available ?? c.cad_available ?? false,
+    snapmagic_url: c.snapmagic_url || c.cad_url || "",
+    mpn_confidence: c.mpn_confidence || "verified",
+    verified: c.verified ?? true,
+    warnings: c.warnings || [],
+    alternatives: c.alternatives || [],
+    justification: c.justification || c.constraints_reasoning || "",
+  }));
+
+  const notSourced = (data.not_sourced || []).concat(
+    rawComponents
+      .filter((c: JsonData) => c.status === "not_found" || c.status === "error")
+      .map((c: JsonData) => ({ item: c.ref || c.value || "unknown", reason: c.reason || c.status }))
+  );
+
+  const summary = data.bom_summary || {
+    unique_parts: components.filter((c: JsonData) => c.mpn).length,
+    total_components_per_unit: components.reduce((s: number, c: JsonData) => s + (c.qty_per_unit || 0), 0),
+    cost_per_unit: components.reduce((s: number, c: JsonData) => s + (c.unit_price || 0) * (c.qty_per_unit || 0), 0),
+    cost_total: components.reduce((s: number, c: JsonData) => s + (c.unit_price || 0) * (c.qty_total || 0), 0),
+    volume: data.production_volume || 1,
+    currency: components[0]?.currency || "USD",
+  };
+
   return (
     <div className="space-y-4">
       {messageTxt && (
@@ -54,9 +94,9 @@ function RecommendationView({ data, messageTxt }: { data: JsonData; messageTxt: 
         </p>
       )}
       <BOMTable
-        components={data.components || []}
-        notSourced={data.not_sourced}
-        summary={data.bom_summary}
+        components={components}
+        notSourced={notSourced.length ? notSourced : undefined}
+        summary={summary}
         exportFiles={data.export_files}
       />
     </div>
