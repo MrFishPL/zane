@@ -67,21 +67,21 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "crop_zoom",
-            "description": "Crop and zoom into a region of an image for closer inspection.",
+            "name": "crop_zoom_image",
+            "description": "Crop and zoom into a region of an image for closer inspection. Coordinates are percentages (0-100) of image dimensions. Returns base64 of the cropped region.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "image_path": {
                         "type": "string",
-                        "description": "MinIO object path to the source image",
+                        "description": "MinIO URI of the source image (e.g. minio://temp/page_3.png)",
                     },
-                    "x": {"type": "integer", "description": "Left coordinate of crop region"},
-                    "y": {"type": "integer", "description": "Top coordinate of crop region"},
-                    "width": {"type": "integer", "description": "Width of crop region"},
-                    "height": {"type": "integer", "description": "Height of crop region"},
+                    "x1_pct": {"type": "number", "description": "Left edge percentage (0-100)"},
+                    "y1_pct": {"type": "number", "description": "Top edge percentage (0-100)"},
+                    "x2_pct": {"type": "number", "description": "Right edge percentage (0-100)"},
+                    "y2_pct": {"type": "number", "description": "Bottom edge percentage (0-100)"},
                 },
-                "required": ["image_path", "x", "y", "width", "height"],
+                "required": ["image_path", "x1_pct", "y1_pct", "x2_pct", "y2_pct"],
             },
         },
     },
@@ -235,7 +235,7 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "generate_csv",
-            "description": "Generate a CSV BOM file with columns: Manufacturer Part Number, Quantity. Returns a MinIO download URL.",
+            "description": "Generate a CSV BOM file and upload to MinIO. Returns a dict with 'path' (MinIO URI) on success.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -245,18 +245,26 @@ TOOLS: list[dict[str, Any]] = [
                             "type": "object",
                             "properties": {
                                 "mpn": {"type": "string"},
-                                "quantity": {"type": "integer"},
+                                "qty_per_unit": {"type": "integer"},
                             },
-                            "required": ["mpn", "quantity"],
+                            "required": ["mpn", "qty_per_unit"],
                         },
-                        "description": "List of components with MPN and quantity",
+                        "description": "List of component dicts with mpn, qty_per_unit, and any other BOM fields",
+                    },
+                    "volume": {
+                        "type": "integer",
+                        "description": "Production volume multiplier for quantities",
+                    },
+                    "user_id": {
+                        "type": "string",
+                        "description": "User ID for storage path",
                     },
                     "conversation_id": {
                         "type": "string",
-                        "description": "Conversation ID for file naming",
+                        "description": "Conversation ID for storage path",
                     },
                 },
-                "required": ["components", "conversation_id"],
+                "required": ["components", "volume", "user_id", "conversation_id"],
             },
         },
     },
@@ -264,21 +272,33 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "generate_kicad_library",
-            "description": "Generate KiCad library package (.kicad_sym + .kicad_mod) for the given MPNs. Returns a MinIO download URL.",
+            "description": "Generate KiCad library ZIP (.kicad_sym + .kicad_mod) and upload to MinIO. Returns a dict with 'path' (MinIO URI) on success.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "mpns": {
+                    "components": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of manufacturer part numbers",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "mpn": {"type": "string"},
+                                "description": {"type": "string"},
+                                "datasheet_url": {"type": "string"},
+                            },
+                            "required": ["mpn"],
+                        },
+                        "description": "List of component dicts with mpn, description, datasheet_url, etc.",
+                    },
+                    "user_id": {
+                        "type": "string",
+                        "description": "User ID for storage path",
                     },
                     "conversation_id": {
                         "type": "string",
-                        "description": "Conversation ID for file naming",
+                        "description": "Conversation ID for storage path",
                     },
                 },
-                "required": ["mpns", "conversation_id"],
+                "required": ["components", "user_id", "conversation_id"],
             },
         },
     },
@@ -286,21 +306,32 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "generate_altium_library",
-            "description": "Generate Altium library package (.SchLib + .PcbLib) for the given MPNs. Returns a MinIO download URL.",
+            "description": "Generate Altium library ZIP (.SchLib + .PcbLib) and upload to MinIO. Returns a dict with 'path' (MinIO URI) on success.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "mpns": {
+                    "components": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of manufacturer part numbers",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "mpn": {"type": "string"},
+                                "description": {"type": "string"},
+                            },
+                            "required": ["mpn"],
+                        },
+                        "description": "List of component dicts with mpn, description, etc.",
+                    },
+                    "user_id": {
+                        "type": "string",
+                        "description": "User ID for storage path",
                     },
                     "conversation_id": {
                         "type": "string",
-                        "description": "Conversation ID for file naming",
+                        "description": "Conversation ID for storage path",
                     },
                 },
-                "required": ["mpns", "conversation_id"],
+                "required": ["components", "user_id", "conversation_id"],
             },
         },
     },
@@ -361,7 +392,7 @@ class AgentRunner:
             Async callback to publish progress updates.
         """
         messages = self._build_messages(
-            user_message, conversation_history, attachments
+            user_message, conversation_history, attachments, conversation_id
         )
 
         return await self._llm_loop(messages, conversation_id, on_status)
@@ -370,14 +401,26 @@ class AgentRunner:
     # Message assembly
     # ------------------------------------------------------------------
 
+    _DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+
     def _build_messages(
         self,
         user_message: str,
         history: list[dict[str, Any]] | None,
         attachments: list[dict[str, Any]] | None,
+        conversation_id: str = "",
     ) -> list[dict[str, Any]]:
+        # Inject session context so the LLM can pass user_id and
+        # conversation_id to export tools.
+        context_block = (
+            f"\n\n## Session Context\n"
+            f"- user_id: {self._DEFAULT_USER_ID}\n"
+            f"- conversation_id: {conversation_id}\n"
+            f"Use these values when calling export tools "
+            f"(generate_csv, generate_kicad_library, generate_altium_library)."
+        )
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT + context_block},
         ]
 
         # Append prior conversation turns
