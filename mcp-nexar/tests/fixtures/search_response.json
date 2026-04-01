@@ -8,18 +8,9 @@
             "mpn": "RC0603FR-073RL",
             "manufacturer": { "name": "Yageo" },
             "shortDescription": "3 Ohms 0603 1% 0.1W Thick Film Resistor",
-            "specs": [
-              { "attribute": { "name": "Resistance" }, "displayValue": "3 Ohms" },
-              { "attribute": { "name": "Tolerance" }, "displayValue": "1%" },
-              { "attribute": { "name": "Power (Watts)" }, "displayValue": "0.1W" },
-              { "attribute": { "name": "Package / Case" }, "displayValue": "0603 (1608 Metric)" },
-              { "attribute": { "name": "Temperature Coefficient" }, "displayValue": "100ppm/K" },
-              { "attribute": { "name": "Mounting Type" }, "displayValue": "Surface Mount" },
-              { "attribute": { "name": "Lifecycle Status" }, "displayValue": "Active" },
-              { "attribute": { "name": "Series" }, "displayValue": "RC" },
-              { "attribute": { "name": "Composition" }, "displayValue": "Thick Film" }
-            ],
-            "bestDatasheet": { "url": "https://www.yageo.com/upload/media/product/products/datasheet/rchip/pyu-rc_group_51_rohs_2.pdf" },
+            "totalAvail": 2270000,
+            "category": { "name": "Resistors" },
+            "octopartUrl": "https://octopart.com/rc0603fr-073rl-yageo-123456",
             "medianPrice1000": { "price": 0.0023, "currency": "USD" },
             "sellers": [
               {
@@ -27,6 +18,8 @@
                 "offers": [
                   {
                     "inventoryLevel": 450000,
+                    "moq": 1,
+                    "sku": "311-3.0HRCT-ND",
                     "prices": [
                       { "quantity": 1, "price": 0.01, "currency": "USD" },
                       { "quantity": 10, "price": 0.008, "currency": "USD" },
@@ -42,6 +35,8 @@
                 "offers": [
                   {
                     "inventoryLevel": 320000,
+                    "moq": 1,
+                    "sku": "603-RC0603FR-073RL",
                     "prices": [
                       { "quantity": 1, "price": 0.012, "currency": "USD" },
                       { "quantity": 10, "price": 0.009, "currency": "USD" },
@@ -56,6 +51,8 @@
                 "offers": [
                   {
                     "inventoryLevel": 1500000,
+                    "moq": 10,
+                    "sku": "C21190",
                     "prices": [
                       { "quantity": 1, "price": 0.003, "currency": "USD" },
                       { "quantity": 100, "price": 0.002, "currency": "USD" }
@@ -64,9 +61,7 @@
                   }
                 ]
               }
-            ],
-            "v3uid": "abc123def456",
-            "counts": null
+            ]
           }
         },
         {
@@ -74,14 +69,9 @@
             "mpn": "CRCW06033R00FKEA",
             "manufacturer": { "name": "Vishay Dale" },
             "shortDescription": "3 Ohms 0603 1% 0.1W Thick Film Resistor",
-            "specs": [
-              { "attribute": { "name": "Resistance" }, "displayValue": "3 Ohms" },
-              { "attribute": { "name": "Tolerance" }, "displayValue": "1%" },
-              { "attribute": { "name": "Power (Watts)" }, "displayValue": "0.1W" },
-              { "attribute": { "name": "Package / Case" }, "displayValue": "0603 (1608 Metric)" },
-              { "attribute": { "name": "Lifecycle Status" }, "displayValue": "Active" }
-            ],
-            "bestDatasheet": { "url": "https://www.vishay.com/docs/20035/dcrcwe3.pdf" },
+            "totalAvail": 200000,
+            "category": { "name": "Resistors" },
+            "octopartUrl": "https://octopart.com/crcw06033r00fkea-vishay-789012",
             "medianPrice1000": { "price": 0.0035, "currency": "USD" },
             "sellers": [
               {
@@ -89,6 +79,8 @@
                 "offers": [
                   {
                     "inventoryLevel": 200000,
+                    "moq": 1,
+                    "sku": "541-CRCW06033R00FKEACT-ND",
                     "prices": [
                       { "quantity": 1, "price": 0.015, "currency": "USD" },
                       { "quantity": 100, "price": 0.008, "currency": "USD" }
@@ -97,9 +89,7 @@
                   }
                 ]
               }
-            ],
-            "v3uid": "def789ghi012",
-            "counts": null
+            ]
           }
         }
       ]
