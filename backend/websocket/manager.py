@@ -106,6 +106,16 @@ class ConnectionManager:
                     except (json.JSONDecodeError, TypeError):
                         data = {"raw": message["data"]}
 
+                    msg_type = data.get("type")
+
+                    # Format decision_required messages for the frontend
+                    if msg_type == "decision_required":
+                        await self.broadcast(conversation_id, {
+                            "type": "decision_required",
+                            "data": data.get("data", {}),
+                        })
+                        continue
+
                     # Note: result persistence is handled by the background
                     # listener in messages.py — the WS manager only broadcasts
                     await self.broadcast(conversation_id, data)

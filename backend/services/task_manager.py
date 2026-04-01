@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import structlog
@@ -52,6 +53,14 @@ async def submit_task(
         history_length=len(history),
     )
     return task
+
+
+async def submit_decision(task_id: str, decision_data: dict) -> None:
+    """Push a user decision to the agent's decision queue."""
+    redis = redis_client.get_client()
+    key = f"agent:decisions:{task_id}"
+    await redis.lpush(key, json.dumps(decision_data))
+    log.info("task_manager.decision_submitted", task_id=task_id)
 
 
 def prepare_conversation_history(messages: list[dict]) -> list[dict]:

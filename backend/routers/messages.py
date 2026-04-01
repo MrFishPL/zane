@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 
 import httpx
 import structlog
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from services import supabase_client, minio_client, task_manager
@@ -20,9 +22,13 @@ DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class SendMessageRequest(BaseModel):
-    content: str
+    content: str = ""
     attachments: list[dict] | None = None
     upload_ids: list[str] | None = None
+    # Decision response fields (optional)
+    decision_id: str | None = None
+    task_id: str | None = None
+    choice: str | None = None
 
 
 @router.post("/{conversation_id}/messages", status_code=202)
@@ -32,6 +38,21 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
     Returns 202 Accepted immediately. The agent processes asynchronously.
     Returns 409 Conflict if an agent task is already running.
     """
+    # Handle decision responses — route to agent's decision queue, not a new task
+    if body.decision_id:
+        if not body.task_id or not body.choice:
+            raise HTTPException(400, "decision_id requires task_id and choice")
+        await task_manager.submit_decision(body.task_id, {
+            "decision_id": body.decision_id,
+            "choice": body.choice,
+        })
+        user_msg = supabase_client.create_message(
+            conversation_id,
+            role="user",
+            content=json.dumps({"decision_id": body.decision_id, "choice": body.choice}),
+        )
+        return JSONResponse({"message": user_msg, "type": "decision_response"})
+
     # Check for running task
     existing_task = supabase_client.get_agent_task(conversation_id)
     if existing_task is not None:
@@ -97,33 +118,35 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
 
 
 async def _generate_title(conversation_id: str, first_message: str) -> None:
-    """Generate a conversation title using LiteLLM (gpt-4o-mini) in the background."""
-    litellm_url = os.environ.get("LITELLM_BASE_URL", "http://litellm-proxy:4000")
+    """Generate a conversation title using OpenAI directly in the background."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
-                f"{litellm_url}/v1/chat/completions",
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [
                         {
                             "role": "system",
                             "content": (
-                                "Generate a short, descriptive title (max 50 chars) for a "
-                                "conversation about electronic component sourcing. "
-                                "The title should capture the user's intent. "
-                                "Return ONLY the title text, no quotes or punctuation."
+                                "Generate a short title (max 6 words) for this conversation. "
+                                "Return only the title, no quotes."
                             ),
                         },
-                        {"role": "user", "content": first_message},
+                        {"role": "user", "content": first_message[:500]},
                     ],
-                    "max_tokens": 30,
-                    "temperature": 0.5,
+                    "max_tokens": 20,
                 },
             )
-            response.raise_for_status()
             data = response.json()
-            title = data["choices"][0]["message"]["content"].strip()
+            title = data["choices"][0]["message"]["content"].strip().strip('"')
             if title:
                 supabase_client.update_conversation(conversation_id, title)
                 log.info(
