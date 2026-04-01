@@ -101,10 +101,31 @@ function resolveMinioPath(path: string): string {
 function ComponentRow({ comp, currency }: { comp: Component; currency: string }) {
   const [expanded, setExpanded] = useState(false);
   const hasAlternatives = comp.alternatives && comp.alternatives.length > 0;
+  const hasWarnings = comp.warnings && comp.warnings.length > 0;
 
   return (
     <>
-      <tr className="border-b border-border/50 hover:bg-bg-hover/50 transition-colors">
+      <tr className={`border-b border-border/50 hover:bg-bg-hover/50 transition-colors ${hasWarnings ? "bg-warning/5" : ""}`}>
+        {/* Expand arrow — first column */}
+        <td className="px-2 py-2.5 w-8">
+          {(hasAlternatives || hasWarnings) ? (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-text-muted hover:text-text-secondary transition-colors"
+            >
+              <svg
+                className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          ) : null}
+        </td>
+
         {/* Ref */}
         <td className="px-3 py-2.5 text-sm font-mono text-text-primary whitespace-nowrap">
           {comp.ref}
@@ -224,66 +245,58 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
           )}
         </td>
 
-        {/* Warnings */}
-        <td className="px-3 py-2.5 text-sm max-w-[120px]">
-          {comp.warnings && comp.warnings.length > 0 && (
-            <span
-              className="text-xs text-warning cursor-help"
-              title={comp.warnings.join('\n')}
-            >
-              {comp.warnings.length} warning{comp.warnings.length > 1 ? 's' : ''}
-            </span>
-          )}
-        </td>
-
-        {/* Expand alternatives */}
-        <td className="px-2 py-2.5">
-          {hasAlternatives && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-text-muted hover:text-text-secondary transition-colors"
-              title="Show alternatives"
-            >
-              <svg
-                className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+        {/* Warning indicator */}
+        <td className="px-2 py-2.5 text-sm">
+          {hasWarnings && (
+            <span className="text-warning text-xs">!</span>
           )}
         </td>
       </tr>
 
-      {/* Alternatives */}
-      {expanded &&
-        comp.alternatives.map((alt, i) => (
-          <tr
-            key={`${comp.ref}-alt-${i}`}
-            className={`border-b border-border/30 ${alt.snapmagic_available ? "bg-success/5" : "bg-bg-tertiary/50"}`}
-          >
-            <td className="px-3 py-2 text-xs text-text-muted pl-8">Alt</td>
-            <td className="px-3 py-2 text-xs font-mono text-text-secondary">
-              {alt.mpn}
-            </td>
-            <td className="px-3 py-2 text-xs text-text-muted">
-              {alt.manufacturer}
-            </td>
-            <td colSpan={3} className="px-3 py-2 text-xs text-text-muted italic">
-              {alt.note}
-              {alt.snapmagic_available && (
-                <span className="ml-2 text-success font-medium not-italic">CAD</span>
-              )}
-            </td>
-            <td className="px-3 py-2 text-xs text-text-secondary text-right">
-              {formatPrice(alt.unit_price, currency)}
-            </td>
-            <td colSpan={6} />
-          </tr>
-        ))}
+      {/* Expanded: warnings + alternatives */}
+      {expanded && (
+        <>
+          {/* Warnings inline */}
+          {hasWarnings && (
+            <tr className="bg-warning/5 border-b border-border/30">
+              <td />
+              <td colSpan={11} className="px-3 py-2">
+                {comp.warnings.map((w, i) => (
+                  <p key={i} className="text-xs text-warning">
+                    {w}
+                  </p>
+                ))}
+              </td>
+            </tr>
+          )}
+          {/* Alternatives */}
+          {comp.alternatives?.map((alt, i) => (
+            <tr
+              key={`${comp.ref}-alt-${i}`}
+              className={`border-b border-border/30 ${alt.snapmagic_available ? "bg-success/5" : "bg-bg-tertiary/50"}`}
+            >
+              <td />
+              <td className="px-3 py-2 text-xs text-text-muted">Alt</td>
+              <td className="px-3 py-2 text-xs font-mono text-text-secondary">
+                {alt.mpn}
+              </td>
+              <td className="px-3 py-2 text-xs text-text-muted">
+                {alt.manufacturer}
+              </td>
+              <td colSpan={3} className="px-3 py-2 text-xs text-text-muted italic">
+                {alt.note}
+                {alt.snapmagic_available && (
+                  <span className="ml-2 text-success font-medium not-italic">CAD</span>
+                )}
+              </td>
+              <td className="px-3 py-2 text-xs text-text-secondary text-right">
+                {formatPrice(alt.unit_price, currency)}
+              </td>
+              <td colSpan={4} />
+            </tr>
+          ))}
+        </>
+      )}
     </>
   );
 }
@@ -305,6 +318,7 @@ export default function BOMTable({
         <table className="w-full text-left table-auto" style={{ minWidth: '900px' }}>
           <thead>
             <tr className="bg-bg-tertiary border-b border-border">
+              <th className="px-2 py-2.5 w-8" />
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Ref</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">MPN</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Manufacturer</th>
@@ -315,9 +329,8 @@ export default function BOMTable({
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-right">Stock</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Lifecycle</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Distributor</th>
-              <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-center">SnapMagic</th>
-              <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Warnings</th>
-              <th className="px-3 py-2.5 w-8" />
+              <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-center">CAD</th>
+              <th className="px-2 py-2.5 w-6" />
             </tr>
           </thead>
           <tbody>

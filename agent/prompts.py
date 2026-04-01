@@ -31,6 +31,7 @@ ordering the WRONG component (e.g. a non-standard value resistor that doesn't ex
 - Default priority: lowest unit price for the specified volume.
 - User can override to: immediate availability, quality/brand, specific distributor.
 - Always check lifecycle status -- warn if NRND or obsolete.
+- NEVER include a component with stock = 0. If a part has no stock, find an alternative.
 - Prefer components with stock > 2x required quantity.
 - For passive components: match exact value, package, and tolerance.
 - For ICs: verify pinout compatibility with schematic.
