@@ -1,6 +1,6 @@
-"""Unit tests for mcp-snapmagic tools with mocked HTTP responses."""
+"""Unit tests for mcp-snapmagic tools with mocked Tavily responses."""
 
-import json
+import asyncio
 import pathlib
 import sys
 from unittest.mock import AsyncMock, patch
@@ -11,104 +11,81 @@ import pytest
 # Add parent dir to path so imports resolve when running from repo root
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from search_client import (
-    SnapMagicSearchClient,
-    _extract_json,
-    _normalise_result,
-)
-
-FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
-
-
-def _load_fixture(name: str) -> dict:
-    return json.loads((FIXTURES / name).read_text())
+from search_client import SnapMagicSearchClient, _detect_formats, _mpn_matches
 
 
 # ---------------------------------------------------------------------------
-# Helper: build a fake httpx.Response
+# Helper: build a fake Tavily search response
 # ---------------------------------------------------------------------------
 
-def _mock_response(fixture_name: str, status: int = 200) -> httpx.Response:
-    data = _load_fixture(fixture_name)
+def _tavily_response(results: list[dict], status: int = 200) -> httpx.Response:
     return httpx.Response(
         status_code=status,
-        json=data,
-        request=httpx.Request("POST", "http://fake/v1/chat/completions"),
+        json={"results": results},
+        request=httpx.Request("POST", "https://api.tavily.com/search"),
     )
 
 
-# ---------------------------------------------------------------------------
-# Unit tests for _extract_json
-# ---------------------------------------------------------------------------
-
-class TestExtractJson:
-    def test_extracts_from_code_block(self):
-        text = 'Here is the result:\n```json\n{"available": true, "url": "https://x.com", "formats": ["KiCad"]}\n```'
-        result = _extract_json(text)
-        assert result is not None
-        assert result["available"] is True
-
-    def test_extracts_raw_json(self):
-        text = '{"available": false, "url": null, "formats": []}'
-        result = _extract_json(text)
-        assert result is not None
-        assert result["available"] is False
-
-    def test_returns_none_for_no_json(self):
-        text = "I cannot find this component."
-        result = _extract_json(text)
-        assert result is None
-
-    def test_handles_malformed_json(self):
-        text = '{"available": true, "url": }'
-        result = _extract_json(text)
-        assert result is None
+def _snapeda_result(mpn: str, formats_text: str = "KiCad Altium Eagle") -> dict:
+    """Build a fake Tavily result that looks like a SnapEDA parts page."""
+    return {
+        "url": f"https://www.snapeda.com/parts/{mpn}/Manufacturer/view/",
+        "title": f"{mpn} - SnapEDA",
+        "content": f"{mpn} symbol and footprint. Download in {formats_text} format.",
+    }
 
 
 # ---------------------------------------------------------------------------
-# Unit tests for _normalise_result
+# Unit tests for _mpn_matches
 # ---------------------------------------------------------------------------
 
-class TestNormaliseResult:
-    def test_normalises_valid_result(self):
-        raw = {"available": True, "url": "https://snapeda.com/part", "formats": ["KiCad", "Altium"]}
-        result = _normalise_result(raw)
-        assert result["available"] is True
-        assert result["url"] == "https://snapeda.com/part"
-        assert result["formats"] == ["kicad", "altium"]
+class TestMpnMatches:
+    def test_exact_match_in_content(self):
+        assert _mpn_matches("STM32F103", "https://snapeda.com/parts/STM32F103/x/", "STM32F103 symbol")
 
-    def test_normalises_none(self):
-        result = _normalise_result(None)
-        assert result["available"] is False
-        assert result["url"] is None
-        assert result["formats"] == []
+    def test_url_prefix_match(self):
+        assert _mpn_matches("BFP740H6327XTSA1", "https://snapeda.com/parts/BFP740/Infineon/", "BFP740 footprint")
 
-    def test_filters_unknown_formats(self):
-        raw = {"available": True, "url": "https://x.com", "formats": ["KiCad", "PADS", "OrCAD"]}
-        result = _normalise_result(raw)
-        assert result["formats"] == ["kicad"]
-
-    def test_handles_string_formats(self):
-        raw = {"available": True, "url": "https://x.com", "formats": "KiCad"}
-        result = _normalise_result(raw)
-        assert result["formats"] == ["kicad"]
+    def test_no_match(self):
+        assert not _mpn_matches("TOTALLY_DIFFERENT", "https://snapeda.com/parts/ABC123/x/", "ABC123 symbol")
 
 
 # ---------------------------------------------------------------------------
-# Integration tests for SnapMagicSearchClient
+# Unit tests for _detect_formats
+# ---------------------------------------------------------------------------
+
+class TestDetectFormats:
+    def test_all_formats(self):
+        formats = _detect_formats("Download KiCad, Altium and Eagle files")
+        assert formats == ["altium", "eagle", "kicad"]
+
+    def test_single_format(self):
+        formats = _detect_formats("Available for KiCad only")
+        assert formats == ["kicad"]
+
+    def test_no_formats_but_download_keyword(self):
+        formats = _detect_formats("Download symbol and footprint")
+        assert formats == ["altium", "eagle", "kicad"]
+
+    def test_no_formats_no_keywords(self):
+        formats = _detect_formats("This is a random page about electronics")
+        assert formats == []
+
+
+# ---------------------------------------------------------------------------
+# Integration tests for SnapMagicSearchClient.check_availability
 # ---------------------------------------------------------------------------
 
 class TestCheckAvailability:
     @pytest.mark.asyncio
     async def test_available_component(self):
-        """Component found on SnapMagic with all formats."""
-        mock_resp = _mock_response("llm_available.json")
-
-        client = SnapMagicSearchClient(base_url="http://fake")
+        """Component found on SnapEDA with all formats."""
+        tavily_resp = _tavily_response([_snapeda_result("STM32F103C8T6")])
+        client = SnapMagicSearchClient(api_key="test-key")
 
         with patch("search_client.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
-            instance.post.return_value = mock_resp
+            instance.post.return_value = tavily_resp
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
             MockClient.return_value = instance
@@ -125,14 +102,13 @@ class TestCheckAvailability:
 
     @pytest.mark.asyncio
     async def test_unavailable_component(self):
-        """Component not found on SnapMagic."""
-        mock_resp = _mock_response("llm_unavailable.json")
-
-        client = SnapMagicSearchClient(base_url="http://fake")
+        """Component not found on SnapEDA."""
+        tavily_resp = _tavily_response([])
+        client = SnapMagicSearchClient(api_key="test-key")
 
         with patch("search_client.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
-            instance.post.return_value = mock_resp
+            instance.post.return_value = tavily_resp
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
             MockClient.return_value = instance
@@ -147,13 +123,12 @@ class TestCheckAvailability:
     @pytest.mark.asyncio
     async def test_partial_formats(self):
         """Component found but only some formats available."""
-        mock_resp = _mock_response("llm_partial.json")
-
-        client = SnapMagicSearchClient(base_url="http://fake")
+        tavily_resp = _tavily_response([_snapeda_result("NE555P", "KiCad")])
+        client = SnapMagicSearchClient(api_key="test-key")
 
         with patch("search_client.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
-            instance.post.return_value = mock_resp
+            instance.post.return_value = tavily_resp
             instance.__aenter__ = AsyncMock(return_value=instance)
             instance.__aexit__ = AsyncMock(return_value=False)
             MockClient.return_value = instance
@@ -165,82 +140,19 @@ class TestCheckAvailability:
         assert "altium" not in result["formats"]
 
     @pytest.mark.asyncio
-    async def test_invalid_llm_response(self):
-        """LLM returns text without valid JSON."""
-        mock_resp = _mock_response("llm_invalid.json")
+    async def test_no_api_key(self):
+        """Missing API key returns unavailable with low confidence."""
+        client = SnapMagicSearchClient(api_key="")
 
-        client = SnapMagicSearchClient(base_url="http://fake")
-
-        with patch("search_client.httpx.AsyncClient") as MockClient:
-            instance = AsyncMock()
-            instance.post.return_value = mock_resp
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
-
-            result = await client.check_availability("BADRESPONSE-001")
+        result = await client.check_availability("STM32F103C8T6")
 
         assert result["available"] is False
-        assert result["url"] is None
-        assert result["formats"] == []
+        assert result["confidence"] == "low"
 
     @pytest.mark.asyncio
-    async def test_empty_choices(self):
-        """LLM returns empty choices array."""
-        mock_resp = _mock_response("llm_empty_choices.json")
-
-        client = SnapMagicSearchClient(base_url="http://fake")
-
-        with patch("search_client.httpx.AsyncClient") as MockClient:
-            instance = AsyncMock()
-            instance.post.return_value = mock_resp
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
-
-            result = await client.check_availability("EMPTY-001")
-
-        assert result["available"] is False
-
-    @pytest.mark.asyncio
-    async def test_tools_fallback_on_422(self):
-        """When tool call returns 422, falls back to simple prompt."""
-        error_resp = httpx.Response(
-            status_code=422,
-            json={"error": "tools not supported"},
-            request=httpx.Request("POST", "http://fake/v1/chat/completions"),
-        )
-        success_resp = _mock_response("llm_available.json")
-
-        client = SnapMagicSearchClient(base_url="http://fake")
-
-        call_count = 0
-
-        async def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise httpx.HTTPStatusError(
-                    "422", request=error_resp.request, response=error_resp
-                )
-            return success_resp
-
-        with patch("search_client.httpx.AsyncClient") as MockClient:
-            instance = AsyncMock()
-            instance.post.side_effect = side_effect
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
-
-            result = await client.check_availability("STM32F103C8T6")
-
-        assert result["available"] is True
-        assert result["confidence"] == "low"  # fallback = low confidence
-
-    @pytest.mark.asyncio
-    async def test_network_timeout(self):
-        """Network timeout raises and is handled."""
-        client = SnapMagicSearchClient(base_url="http://fake")
+    async def test_network_error(self):
+        """Network error returns unavailable with error field."""
+        client = SnapMagicSearchClient(api_key="test-key")
 
         with patch("search_client.httpx.AsyncClient") as MockClient:
             instance = AsyncMock()
@@ -249,73 +161,120 @@ class TestCheckAvailability:
             instance.__aexit__ = AsyncMock(return_value=False)
             MockClient.return_value = instance
 
-            with pytest.raises(httpx.ReadTimeout):
-                await client.check_availability("TIMEOUT-001")
+            result = await client.check_availability("TIMEOUT-001")
 
+        assert result["available"] is False
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_non_parts_url_skipped(self):
+        """Results without /parts/ in URL are skipped."""
+        non_parts_result = {
+            "url": "https://www.snapeda.com/about/",
+            "title": "About SnapEDA",
+            "content": "STM32F103C8T6 mentioned on about page",
+        }
+        tavily_resp = _tavily_response([non_parts_result])
+        client = SnapMagicSearchClient(api_key="test-key")
+
+        with patch("search_client.httpx.AsyncClient") as MockClient:
+            instance = AsyncMock()
+            instance.post.return_value = tavily_resp
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = instance
+
+            result = await client.check_availability("STM32F103C8T6")
+
+        assert result["available"] is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for check_batch: dict-by-MPN return format and parallel execution
+# ---------------------------------------------------------------------------
 
 class TestCheckBatch:
     @pytest.mark.asyncio
+    async def test_batch_returns_dict_keyed_by_mpn(self):
+        """Batch returns a dict keyed by MPN, not a list."""
+        client = SnapMagicSearchClient(api_key="test-key")
+
+        async def mock_check(mpn):
+            return {"available": True, "url": f"https://snapeda.com/parts/{mpn}/x/", "formats": ["kicad"], "confidence": "high", "mpn": mpn}
+
+        with patch.object(client, "check_availability", side_effect=mock_check):
+            results = await client.check_batch(["MPN-A", "MPN-B", "MPN-C"])
+
+        assert isinstance(results, dict)
+        assert set(results.keys()) == {"MPN-A", "MPN-B", "MPN-C"}
+        assert results["MPN-A"]["available"] is True
+        assert results["MPN-B"]["mpn"] == "MPN-B"
+
+    @pytest.mark.asyncio
     async def test_batch_mixed_results(self):
         """Batch with one available, one unavailable component."""
-        available_resp = _mock_response("llm_available.json")
-        unavailable_resp = _mock_response("llm_unavailable.json")
+        client = SnapMagicSearchClient(api_key="test-key")
 
-        client = SnapMagicSearchClient(base_url="http://fake")
+        async def mock_check(mpn):
+            if mpn == "STM32F103C8T6":
+                return {"available": True, "url": "https://snapeda.com/parts/STM32F103C8T6/x/", "formats": ["kicad", "altium", "eagle"], "confidence": "high", "mpn": mpn}
+            return {"available": False, "url": None, "formats": [], "confidence": "high", "mpn": mpn}
 
-        call_count = 0
-
-        async def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return available_resp
-            return unavailable_resp
-
-        with patch("search_client.httpx.AsyncClient") as MockClient:
-            instance = AsyncMock()
-            instance.post.side_effect = side_effect
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
-
+        with patch.object(client, "check_availability", side_effect=mock_check):
             results = await client.check_batch(["STM32F103C8T6", "NONEXISTENT-123"])
 
         assert len(results) == 2
-        assert results[0]["available"] is True
-        assert results[0]["mpn"] == "STM32F103C8T6"
-        assert results[1]["available"] is False
-        assert results[1]["mpn"] == "NONEXISTENT-123"
+        assert results["STM32F103C8T6"]["available"] is True
+        assert results["STM32F103C8T6"]["mpn"] == "STM32F103C8T6"
+        assert results["NONEXISTENT-123"]["available"] is False
+        assert results["NONEXISTENT-123"]["mpn"] == "NONEXISTENT-123"
 
     @pytest.mark.asyncio
-    async def test_batch_with_error(self):
-        """Batch where one MPN causes an error -- error is captured, not raised."""
-        available_resp = _mock_response("llm_available.json")
+    async def test_batch_skips_exceptions(self):
+        """Batch where one MPN causes an exception -- that MPN is skipped."""
+        client = SnapMagicSearchClient(api_key="test-key")
 
-        client = SnapMagicSearchClient(base_url="http://fake")
+        async def mock_check(mpn):
+            if mpn == "BROKEN-MPN":
+                raise httpx.ReadTimeout("timed out")
+            return {"available": True, "url": f"https://snapeda.com/parts/{mpn}/x/", "formats": ["kicad"], "confidence": "high", "mpn": mpn}
 
-        call_count = 0
+        with patch.object(client, "check_availability", side_effect=mock_check):
+            results = await client.check_batch(["GOOD-MPN", "BROKEN-MPN"])
 
-        async def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return available_resp
-            raise httpx.ReadTimeout("timed out")
+        assert isinstance(results, dict)
+        assert "GOOD-MPN" in results
+        assert "BROKEN-MPN" not in results
+        assert results["GOOD-MPN"]["available"] is True
 
-        with patch("search_client.httpx.AsyncClient") as MockClient:
-            instance = AsyncMock()
-            instance.post.side_effect = side_effect
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-            MockClient.return_value = instance
+    @pytest.mark.asyncio
+    async def test_batch_runs_concurrently(self):
+        """Verify that batch calls run concurrently via asyncio.gather."""
+        client = SnapMagicSearchClient(api_key="test-key")
+        call_order = []
 
-            results = await client.check_batch(["STM32F103C8T6", "TIMEOUT-MPN"])
+        async def mock_check(mpn):
+            call_order.append(f"start-{mpn}")
+            await asyncio.sleep(0)  # yield to event loop
+            call_order.append(f"end-{mpn}")
+            return {"available": True, "url": None, "formats": [], "confidence": "high", "mpn": mpn}
 
-        assert len(results) == 2
-        assert results[0]["available"] is True
-        assert results[1]["available"] is False
-        assert "error" in results[1]
-        assert results[1]["mpn"] == "TIMEOUT-MPN"
+        with patch.object(client, "check_availability", side_effect=mock_check):
+            results = await client.check_batch(["A", "B", "C"])
+
+        assert len(results) == 3
+        # All starts should happen before any ends (concurrent scheduling)
+        start_indices = [call_order.index(f"start-{m}") for m in ["A", "B", "C"]]
+        end_indices = [call_order.index(f"end-{m}") for m in ["A", "B", "C"]]
+        # With gather, all tasks start before the first one completes
+        assert max(start_indices) < min(end_indices)
+
+    @pytest.mark.asyncio
+    async def test_batch_empty_list(self):
+        """Batch with empty list returns empty dict."""
+        client = SnapMagicSearchClient(api_key="test-key")
+        results = await client.check_batch([])
+        assert results == {}
 
 
 # ---------------------------------------------------------------------------

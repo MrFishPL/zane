@@ -4,6 +4,7 @@ Uses advanced search with content extraction to verify that a SnapEDA
 page exists for the exact MPN and determine available CAD formats.
 """
 
+import asyncio
 import os
 import re
 from typing import Any
@@ -122,10 +123,21 @@ class SnapMagicSearchClient:
             log.error("search_client.check.error", mpn=mpn[:200], exc_info=True)
             return {"available": False, "url": None, "formats": [], "confidence": "low", "mpn": mpn, "error": "search failed"}
 
-    async def check_batch(self, mpns: list[str]) -> list[dict[str, Any]]:
-        """Check availability for multiple MPNs."""
+    async def check_batch(self, mpns: list[str], format: str = "any") -> dict[str, Any]:
+        """Check CAD availability for multiple MPNs concurrently."""
         log.info("search_client.check_batch", count=len(mpns))
-        results = []
-        for mpn in mpns:
-            results.append(await self.check_availability(mpn))
+
+        async def _check_one(mpn: str) -> tuple[str, dict]:
+            result = await self.check_availability(mpn)
+            return mpn, result
+
+        tasks = [_check_one(mpn) for mpn in mpns]
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+
+        results: dict[str, Any] = {}
+        for item in results_list:
+            if isinstance(item, Exception):
+                continue
+            mpn, result = item
+            results[mpn] = result
         return results

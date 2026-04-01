@@ -116,27 +116,26 @@ async def check_cad_availability(mpn: str, format: str = "any") -> dict:
 
 @mcp.tool()
 async def check_cad_batch(mpns: list[str], format: str = "any") -> dict:
-    """Batch lookup of CAD model availability for multiple MPNs.
+    """Check CAD model availability for multiple MPNs.
 
     Args:
         mpns: List of Manufacturer Part Numbers to look up.
         format: CAD format to check: "kicad", "altium", "eagle", or "any".
 
     Returns:
-        {results: list[{available: bool, url: str | null, formats: list[str]}]}
+        dict keyed by MPN: {mpn: {available: bool, url: str | null, formats: list[str]}}
     """
     fmt = format.lower().strip()
     if fmt not in VALID_FORMATS:
         return {
             "error": f"Invalid format '{format}'. Must be one of: kicad, altium, eagle, any",
-            "results": [],
         }
 
     start = time.monotonic()
     mpns_str = ", ".join(mpns[:10])
     try:
-        results = await client.check_batch(mpns)
-        results = [_filter_formats(r, fmt) for r in results]
+        results = await client.check_batch(mpns, fmt)
+        results = {mpn: _filter_formats(r, fmt) for mpn, r in results.items()}
         duration_ms = round((time.monotonic() - start) * 1000)
         _log_tool_call(
             "check_cad_batch",
@@ -144,7 +143,7 @@ async def check_cad_batch(mpns: list[str], format: str = "any") -> dict:
             duration_ms,
             True,
         )
-        return {"results": results}
+        return results
     except Exception as exc:
         duration_ms = round((time.monotonic() - start) * 1000)
         _log_tool_call(
@@ -154,7 +153,7 @@ async def check_cad_batch(mpns: list[str], format: str = "any") -> dict:
             False,
             str(exc),
         )
-        return {"error": str(exc), "results": []}
+        return {"error": str(exc)}
 
 
 # Health endpoint
