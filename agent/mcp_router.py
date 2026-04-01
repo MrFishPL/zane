@@ -28,8 +28,7 @@ _TOOL_SERVER_MAP: dict[str, str] = {
     # mcp-nexar
     "search_parts": "mcp-nexar",
     "search_mpn": "mcp-nexar",
-    "get_part_details": "mcp-nexar",
-    "check_stock": "mcp-nexar",
+    "multi_match": "mcp-nexar",
     # mcp-snapmagic
     "check_cad_availability": "mcp-snapmagic",
     "check_cad_batch": "mcp-snapmagic",
