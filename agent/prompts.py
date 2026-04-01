@@ -67,12 +67,20 @@ type (e.g. common audio mixer values) and note your assumptions. Do NOT ask the 
 - Academic papers, simulation screenshots, and hand-drawn schematics ALL contain \
 usable information. The PDF text extraction gives you component derivations — USE them.
 
-## CRITICAL: Every component must have an MPN
+## CRITICAL: Every component must have a real, purchasable MPN
+- The "Not Sourced" list should be EMPTY or near-empty. Your job is to SOURCE parts.
+- NEVER put a component in "not_sourced" if you haven't tried at least 3 different \
+search queries on Nexar for it. Try different keywords, manufacturers, and descriptions.
+- For resistors: search by value + package (e.g. "8.2k 0603 resistor", "3.6k 0603 1%")
+- For potentiometers: search by type + value (e.g. "50k linear panel mount potentiometer", \
+"10k dual gang potentiometer"). Try brands: Alpha, Bourns, TT Electronics.
+- For connectors/jacks: search directly (e.g. "6.35mm PCB mount jack", "1/4 inch jack mono")
+- For transformers: search by spec (e.g. "230V 15V PCB transformer", "toroidal transformer 15VA")
+- For switches: search by type (e.g. "DPDT toggle switch", "SPDT slide switch PCB")
+- For non-standard capacitors (91nF): use nearest standard value (100nF) and note it
+- If Nexar returns no results, use `search_distributor` web search as fallback
 - NEVER return a component with an empty MPN field.
-- If you cannot find a verified MPN from Nexar, use web search to find one.
-- If no exact match exists, find the closest available part and note the substitution.
-- For generic components (potentiometers, jacks), search Nexar with the full spec \
-(e.g. "panel mount D-shaft logarithmic 1M potentiometer dust sealed") to find a real MPN.
+- If after exhaustive search no MPN is found, pick the closest available part and note it.
 
 ## SnapMagic CAD Model Edge Case (CRITICAL)
 After selecting the best component for each position, check SnapMagic availability. \
