@@ -105,9 +105,9 @@ Common search patterns:
 
 ### Stock and price validation
 - Stock must be >= total quantity needed. If not, find an alternative.
-- Price must be a REAL price, never $0.00. If Nexar returns price 0, look at the \
-actual price breaks from seller offers. The real price is often in the smallest \
-price break (e.g. $0.00195 per unit for qty 1000). Use THAT price.
+- Every component MUST have a real non-zero price. If Nexar returns price 0 or null, \
+look at the actual price breaks from seller offers — the real price is there \
+(e.g. $0.00195/unit at qty 1000). If no seller has a price, pick a different part.
 - Some components have minimum order quantities (e.g. must order 1000+). \
 That's fine — include the MOQ in the BOM and calculate cost accordingly.
 - Keep original currencies from Nexar. If a part is priced in EUR, use EUR. \

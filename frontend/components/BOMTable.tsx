@@ -75,8 +75,7 @@ interface BOMTableProps {
 // ---------------------------------------------------------------------------
 
 function formatPrice(value: number, currency: string): string {
-  if (!value || value === 0) return "—";
-  const fractionDigits = value < 0.01 ? 4 : 2;
+  const fractionDigits = value && value < 0.01 ? 4 : 2;
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
