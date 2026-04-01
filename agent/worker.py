@@ -184,6 +184,8 @@ class AgentWorker:
             )
 
             # Collect attachments from current message AND conversation history
+            log.info("attachments_raw", current=len(attachments), history_len=len(history),
+                     current_paths=[a.get("path","?") for a in attachments])
             all_attachments = list(attachments)
             for msg in history:
                 msg_atts = msg.get("attachments", [])
@@ -194,6 +196,8 @@ class AgentWorker:
                             all_attachments.append(att)
 
             # Fetch base64 for all image/PDF attachments
+            log.info("all_attachments_collected", count=len(all_attachments),
+                     paths=[a.get("path","?") for a in all_attachments])
             enriched_attachments = await self._prepare_attachments(
                 all_attachments, conversation_id, task_id
             )
@@ -284,17 +288,38 @@ class AgentWorker:
                 # Render PDF pages to images
                 try:
                     minio_path = path if path.startswith("minio://") else f"minio://{path}"
-                    pages = await router.call_tool("render_pdf_pages", {"pdf_path": minio_path})
-                    if isinstance(pages, str):
-                        pages = json.loads(pages)
-                    if isinstance(pages, list):
-                        for page_path in pages:
-                            b64 = await router.call_tool(
+                    raw_pages = await router.call_tool("render_pdf_pages", {"pdf_path": minio_path})
+                    if isinstance(raw_pages, str):
+                        raw_pages = json.loads(raw_pages)
+                    # Handle both list and dict {"pages": [...]} formats
+                    if isinstance(raw_pages, dict) and "pages" in raw_pages:
+                        page_list = raw_pages["pages"]
+                    elif isinstance(raw_pages, list):
+                        page_list = raw_pages
+                    else:
+                        log.warning("unexpected_render_result", result=type(raw_pages).__name__)
+                        page_list = []
+                    # Only process schematic pages (skip text-only pages)
+                    for page in page_list:
+                        page_path = page if isinstance(page, str) else page.get("minio_path", "")
+                        classification = page.get("classification", "") if isinstance(page, dict) else ""
+                        if not page_path:
+                            continue
+                        # Skip non-schematic pages to save context
+                        if classification and classification not in ("schematic", "diagram", "circuit"):
+                            continue
+                        try:
+                            raw_b64 = await router.call_tool(
                                 "get_image_base64", {"image_path": page_path}
                             )
+                            if isinstance(raw_b64, str):
+                                parsed_b64 = json.loads(raw_b64)
+                                b64 = parsed_b64.get("base64", "")
+                            else:
+                                b64 = raw_b64
                             enriched.append({"type": "image", "path": page_path, "base64": b64})
-                    else:
-                        log.warning("unexpected_render_result", result=pages)
+                        except Exception:
+                            log.error("page_base64_failed", page=page_path, exc_info=True)
                 except Exception:
                     log.error("pdf_render_failed", path=path, exc_info=True)
 
