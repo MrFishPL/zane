@@ -443,7 +443,9 @@ class AgentWorker:
 
         for comp in components:
             stock = comp.get("stock", 0) or 0
+            price = comp.get("unit_price", 0) or 0
             qty_needed = (comp.get("qty_per_unit", 1) or 1) * total_qty_multiplier
+
             if stock < qty_needed:
                 problems.append({
                     "type": "low_stock",
@@ -452,6 +454,13 @@ class AgentWorker:
                     "mpn": comp.get("mpn", ""),
                     "needed": qty_needed,
                     "current_stock": stock,
+                })
+            elif price <= 0:
+                problems.append({
+                    "type": "zero_price",
+                    "ref": comp.get("ref", ""),
+                    "description": comp.get("description", ""),
+                    "mpn": comp.get("mpn", ""),
                 })
 
         for ns in not_sourced:
@@ -485,6 +494,12 @@ class AgentWorker:
                         f"- {p['ref']}: {p['description']} (MPN {p['mpn']} has only "
                         f"{p['current_stock']} stock, need {p['needed']}). "
                         f"Find an alternative with stock >= {p['needed']}."
+                    )
+                elif p["type"] == "zero_price":
+                    problem_descriptions.append(
+                        f"- {p['ref']}: {p['description']} (MPN {p['mpn']} has price $0). "
+                        f"Search for this MPN and find the actual price from seller offers. "
+                        f"If no price exists, find an alternative part with a real price."
                     )
                 else:
                     problem_descriptions.append(

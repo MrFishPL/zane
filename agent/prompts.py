@@ -202,7 +202,7 @@ Always return JSON with exactly one of three statuses.
       "cost_per_unit": <float>,
       "cost_total": <float>,
       "volume": <int>,
-      "currency": "USD"
+      "currency": "<str, e.g. USD or EUR — use the dominant currency>"
     },
     "export_files": {
       "csv": "<url or null>",
@@ -230,5 +230,12 @@ Always return JSON with exactly one of three statuses.
 - message: always plain text, NEVER markdown
 - Null/empty: include the field, use null or []
 - Every component object has the identical set of fields
-- Prices always in USD
+- unit_price: MUST be the actual price from Nexar search results (from seller offer \
+price breaks). NEVER use 0. NEVER invent a price. If the search result shows \
+prices like [{qty: 1000, price: 0.00195}], then unit_price = 0.00195.
+- mpn: MUST be an exact MPN returned by the search_parts tool. NEVER invent or \
+guess an MPN. If you didn't get it from a search result, don't use it.
+- stock: MUST be the actual inventoryLevel from the search result.
+- distributor_url: MUST be the clickUrl from the search result or null.
+- currency: use whatever currency the Nexar result returns (USD, EUR, etc.)
 """
