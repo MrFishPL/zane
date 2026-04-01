@@ -96,20 +96,22 @@ export default function Home() {
           const hasAssistantMsg = (detail.messages || []).some(
             (m: Message) => m.role === "assistant"
           );
-          const conv = conversations.find((c) => c.id === id);
           if (hasAssistantMsg) {
             setAgentStatus(IDLE_STATUS);
-          } else if (conv?.agent_status === "failed") {
-            // Show error for failed tasks
-            setAgentStatus({
-              status: "failed",
-              current_status: null,
-              error: "Agent encountered an error processing this request. Please try again.",
-            });
-          } else if (conv?.agent_status === "running") {
-            setAgentStatus({ status: "running", current_status: null, error: null });
+            // Also update sidebar
+            setConversations((prev) =>
+              prev.map((c) => c.id === id ? { ...c, agent_status: "completed" } : c)
+            );
           } else {
-            setAgentStatus(IDLE_STATUS);
+            // Fetch live agent status
+            getAgentStatus(id)
+              .then((status) => {
+                setAgentStatus(status);
+                setConversations((prev) =>
+                  prev.map((c) => c.id === id ? { ...c, agent_status: status.status } : c)
+                );
+              })
+              .catch(() => setAgentStatus(IDLE_STATUS));
           }
         })
         .catch((err: unknown) => {

@@ -75,11 +75,18 @@ interface BOMTableProps {
 // ---------------------------------------------------------------------------
 
 function formatPrice(value: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-  }).format(value);
+  if (!value || value === 0) return "—";
+  const fractionDigits = value < 0.01 ? 4 : 2;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency || "USD",
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(fractionDigits)} ${currency}`;
+  }
 }
 
 function formatStock(stock: number): string {

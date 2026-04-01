@@ -68,6 +68,10 @@ You MUST work with what you have. This is a hard, non-negotiable rule.
 type (e.g. common audio mixer values) and note your assumptions. Do NOT ask the user.
 - Academic papers, simulation screenshots, and hand-drawn schematics ALL contain \
 usable information. The PDF text extraction gives you component derivations — USE them.
+- The extracted text is your PRIMARY source for component values. Read it CAREFULLY. \
+Every "R1 = 8.2k", "C5 = 68nF", "BC549C", "TDA2320AP", "LM317T" in the text is a \
+component you must include in the BOM. Do NOT claim a component is missing from the \
+schematic if its value appears in the extracted text.
 
 ## CRITICAL: Zero tolerance for "Not Sourced"
 The "not_sourced" list MUST be empty. Every component goes in "components" with a real MPN. \
@@ -99,10 +103,17 @@ Common search patterns:
 - Switches: "DPDT toggle switch", "SPDT slide switch", "toggle switch PCB"
 - LEDs: "LED 3mm red", "LED through hole red"
 
-### Stock validation
-After selecting a part, verify stock >= total quantity needed. \
-If stock is too low, go back to the search loop and find an alternative. \
-NEVER include a part with stock < required quantity. Do NOT warn about stock — fix it.
+### Stock and price validation
+- Stock must be >= total quantity needed. If not, find an alternative.
+- Price must be a REAL price, never $0.00. If Nexar returns price 0, look at the \
+actual price breaks from seller offers. The real price is often in the smallest \
+price break (e.g. $0.00195 per unit for qty 1000). Use THAT price.
+- Some components have minimum order quantities (e.g. must order 1000+). \
+That's fine — include the MOQ in the BOM and calculate cost accordingly.
+- Keep original currencies from Nexar. If a part is priced in EUR, use EUR. \
+If in USD, use USD. The BOM summary should show totals per currency \
+(e.g. "Total: $45.20 USD + €12.30 EUR").
+- NEVER convert currencies. Report each component in its original currency.
 
 ## SnapMagic CAD Model Edge Case (CRITICAL)
 After selecting the best component for each position, check SnapMagic availability. \

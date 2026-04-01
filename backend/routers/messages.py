@@ -78,8 +78,8 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
         conversation_history=messages,
     )
 
-    # Generate title in background if this is the first message
-    if len(messages) <= 1:
+    # Generate title immediately for new conversations
+    if len(messages) == 0:
         asyncio.create_task(
             _generate_title(conversation_id, body.content)
         )
