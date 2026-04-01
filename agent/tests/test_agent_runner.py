@@ -338,3 +338,200 @@ async def test_status_callback_called(
 
     assert len(statuses) == 1
     assert "search_parts" in statuses[0]
+
+
+# ---------------------------------------------------------------------------
+# Image tool interception: crop_zoom_image
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_crop_zoom_result_intercepted_as_image_url(
+    mock_openai_client: AsyncMock,
+    mock_mcp_router: AsyncMock,
+) -> None:
+    """crop_zoom_image base64 is NOT stored in tool result; instead it is
+    injected as an image_url content part in a user message on the next
+    iteration.
+    """
+    # Small 1x1 white JPEG as base64 for testing
+    import base64
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (10, 10), "white").save(buf, format="JPEG")
+    tiny_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    crop_result = json.dumps({
+        "base64": tiny_b64,
+        "minio_path": "minio://temp/crops/page_1_crop.png",
+    })
+
+    async def _mock_call_tool(name, args):
+        if name == "crop_zoom_image":
+            return crop_result
+        return '{"ok": true}'
+
+    mock_mcp_router.call_tool = AsyncMock(side_effect=_mock_call_tool)
+
+    # Step 1: LLM wants to crop_zoom
+    tc1 = make_tool_call("tc-1", "crop_zoom_image", {
+        "image_path": "minio://temp/page_1.png",
+        "x1_pct": 0, "y1_pct": 0, "x2_pct": 50, "y2_pct": 50,
+    })
+    resp1 = make_llm_response(tool_calls=[tc1])
+
+    # Step 2: LLM produces final answer (after seeing the injected image)
+    final = {"status": "analysis", "message": "I can see the components.", "data": {}}
+    resp2 = make_llm_response(content=json.dumps(final))
+
+    mock_openai_client.chat.completions.create = AsyncMock(
+        side_effect=[resp1, resp2]
+    )
+
+    runner = AgentRunner(
+        litellm_base_url="http://fake:4000",
+        mcp_router=mock_mcp_router,
+        openai_client=mock_openai_client,
+    )
+
+    result = await runner.run(user_message="Zoom into top-left")
+    assert result["status"] == "analysis"
+
+    # Verify that the second LLM call received messages including:
+    # 1. The tool result should NOT contain the base64 string
+    # 2. A user message with image_url should have been injected
+    second_call_messages = mock_openai_client.chat.completions.create.call_args_list[1]
+    messages = second_call_messages.kwargs.get("messages") or second_call_messages[1].get("messages", [])
+
+    # Find the tool result message
+    tool_results = [m for m in messages if m.get("role") == "tool"]
+    assert len(tool_results) == 1
+    tool_content = tool_results[0]["content"]
+    # The tool result should NOT contain base64 data
+    assert "base64" not in tool_content.lower() or "image will be visible" in tool_content.lower()
+
+    # Find injected user message with image_url
+    user_msgs_with_images = [
+        m for m in messages
+        if m.get("role") == "user"
+        and isinstance(m.get("content"), list)
+        and any(
+            isinstance(p, dict) and p.get("type") == "image_url"
+            for p in m["content"]
+        )
+    ]
+    assert len(user_msgs_with_images) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Image tool interception: get_image_base64
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_image_base64_intercepted(
+    mock_openai_client: AsyncMock,
+    mock_mcp_router: AsyncMock,
+) -> None:
+    """get_image_base64 results are also intercepted and injected as image_url."""
+    import base64
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (10, 10), "red").save(buf, format="JPEG")
+    tiny_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    async def _mock_call_tool(name, args):
+        if name == "get_image_base64":
+            return json.dumps({"base64": tiny_b64})
+        return '{"ok": true}'
+
+    mock_mcp_router.call_tool = AsyncMock(side_effect=_mock_call_tool)
+
+    tc = make_tool_call("tc-1", "get_image_base64", {"image_path": "minio://temp/page_3.png"})
+    resp1 = make_llm_response(tool_calls=[tc])
+
+    final = {"status": "analysis", "message": "Page loaded.", "data": {}}
+    resp2 = make_llm_response(content=json.dumps(final))
+
+    mock_openai_client.chat.completions.create = AsyncMock(
+        side_effect=[resp1, resp2]
+    )
+
+    runner = AgentRunner(
+        litellm_base_url="http://fake:4000",
+        mcp_router=mock_mcp_router,
+        openai_client=mock_openai_client,
+    )
+
+    result = await runner.run(user_message="Load page 3")
+    assert result["status"] == "analysis"
+
+    # Verify image_url was injected into messages for the 2nd LLM call
+    second_call_messages = mock_openai_client.chat.completions.create.call_args_list[1]
+    messages = second_call_messages.kwargs.get("messages") or second_call_messages[1].get("messages", [])
+
+    user_image_msgs = [
+        m for m in messages
+        if m.get("role") == "user"
+        and isinstance(m.get("content"), list)
+        and any(isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"])
+    ]
+    assert len(user_image_msgs) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Context trimming
+# ---------------------------------------------------------------------------
+
+
+def test_trim_context_large_tool_results() -> None:
+    """_trim_context replaces large tool results with truncated versions."""
+    messages = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "tc1"}]},
+        {"role": "tool", "tool_call_id": "tc1", "content": "x" * 3000},
+        {"role": "assistant", "content": "Done"},
+    ]
+
+    AgentRunner._trim_context(messages)
+
+    tool_msg = messages[3]
+    assert len(tool_msg["content"]) < 3000
+    assert "[trimmed to save context]" in tool_msg["content"]
+
+
+def test_trim_context_drops_injected_images() -> None:
+    """_trim_context removes image_url parts from injected user messages."""
+    messages = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,abc123"}},
+            {"type": "text", "text": "[Injected image from crop_zoom]"},
+        ]},
+        {"role": "assistant", "content": "I see it."},
+    ]
+
+    AgentRunner._trim_context(messages)
+
+    user_msg = messages[1]
+    parts = user_msg["content"]
+    # Should only have text parts remaining
+    assert all(p.get("type") == "text" for p in parts)
+    assert not any(p.get("type") == "image_url" for p in parts)
+
+
+def test_trim_context_preserves_small_tool_results() -> None:
+    """_trim_context does not touch tool results under the threshold."""
+    short_content = '{"status": "ok", "parts": 5}'
+    messages = [
+        {"role": "tool", "tool_call_id": "tc1", "content": short_content},
+    ]
+
+    AgentRunner._trim_context(messages)
+
+    assert messages[0]["content"] == short_content

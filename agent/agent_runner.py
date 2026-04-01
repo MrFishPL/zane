@@ -373,17 +373,63 @@ class AgentRunner:
     # Core LLM + tool-call loop
     # ------------------------------------------------------------------
 
+    # Tools whose results contain base64 image data that should be
+    # injected as image_url content parts rather than text tool results.
+    _IMAGE_TOOLS = {"crop_zoom_image", "get_image_base64"}
+
+    # Iteration threshold after which old tool results are summarized
+    # to keep total context under ~200K tokens.
+    _CONTEXT_TRIM_AFTER = 10
+
     async def _llm_loop(
         self,
         messages: list[dict[str, Any]],
         conversation_id: str,
         on_status: Callable[[str], Awaitable[None]] | None,
     ) -> dict[str, Any]:
-        """Iteratively call the LLM, dispatch tool calls, until a final answer."""
+        """Iteratively call the LLM, dispatch tool calls, until a final answer.
+
+        Key context-management features:
+        - Image tool results (crop_zoom_image, get_image_base64) are NOT
+          stored as huge base64 text in tool result messages.  Instead the
+          base64 is collected in ``pending_images`` and injected as
+          ``image_url`` content parts in a user message on the NEXT
+          iteration, keeping each tool result small.
+        - After ``_CONTEXT_TRIM_AFTER`` iterations the runner walks the
+          message list and replaces verbose tool-result text with compact
+          summaries, preventing unbounded context growth.
+        """
         max_iterations = 25  # safety limit to prevent infinite loops
+
+        # Images from tool results to inject on the next LLM call
+        pending_images: list[dict[str, str]] = []
 
         for iteration in range(max_iterations):
             log.info("llm_iteration", iteration=iteration, message_count=len(messages))
+
+            # --- Inject pending images from previous iteration -----------
+            if pending_images:
+                image_parts: list[dict[str, Any]] = []
+                for img in pending_images:
+                    image_parts.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{img['base64']}"
+                        },
+                    })
+                # Add a user message with the image(s) + a short note
+                label = ", ".join(img.get("label", "image") for img in pending_images)
+                image_parts.append({
+                    "type": "text",
+                    "text": f"[Injected image(s) from tool results: {label}]",
+                })
+                messages.append({"role": "user", "content": image_parts})
+                log.info("pending_images_injected", count=len(pending_images))
+                pending_images = []
+
+            # --- Context trimming after threshold ------------------------
+            if iteration == self._CONTEXT_TRIM_AFTER:
+                self._trim_context(messages)
 
             response = await self._call_llm(messages)
             choice = response.choices[0]
@@ -431,18 +477,34 @@ class AgentRunner:
                         {"error": str(exc), "tool": tool_name}
                     )
 
-                # Truncate large tool results (base64 images) to prevent context overflow
-                if len(result_str) > 50000:
-                    # For image tool results, keep just the summary
+                # --- Image tool interception ------------------------------
+                # For crop_zoom_image / get_image_base64: extract the base64,
+                # queue it for injection as an image_url content part in the
+                # NEXT LLM call, and replace the tool result with a small
+                # placeholder so base64 never bloats the message history.
+                if tool_name in self._IMAGE_TOOLS:
                     try:
-                        parsed_result = json.loads(result_str)
-                        if isinstance(parsed_result, dict) and "base64" in parsed_result:
+                        parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
+                        if isinstance(parsed, dict) and parsed.get("base64"):
+                            b64 = parsed["base64"]
+                            # Resize to 800px JPEG to keep images compact
+                            b64 = self._resize_base64_for_context(b64, max_width=800)
+                            label = parsed.get("minio_path", tool_name)
+                            pending_images.append({"base64": b64, "label": label})
+                            # Replace tool result with a compact pointer
                             result_str = json.dumps({
-                                "note": "Image returned successfully. Use the visual content from the image_url above.",
-                                "size_bytes": len(parsed_result.get("base64", "")),
+                                "status": "ok",
+                                "note": "Image will be visible in the next message as an image_url content part.",
+                                "minio_path": parsed.get("minio_path"),
                             })
-                    except (json.JSONDecodeError, TypeError):
-                        result_str = result_str[:50000] + "...[truncated]"
+                            log.info("image_tool_intercepted", tool=tool_name,
+                                     pending_count=len(pending_images))
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        pass  # fall through to normal handling
+
+                # --- Generic large-result truncation ----------------------
+                if len(result_str) > 50000:
+                    result_str = result_str[:50000] + "...[truncated]"
 
                 messages.append(
                     {
@@ -459,6 +521,91 @@ class AgentRunner:
             "message": "Agent reached maximum iteration limit without producing a final answer.",
             "data": {},
         }
+
+    # ------------------------------------------------------------------
+    # Context trimming
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _trim_context(messages: list[dict[str, Any]]) -> None:
+        """Summarize verbose tool results and injected images to free context.
+
+        Walks *messages* **in-place** and:
+        - Replaces any ``tool`` role message whose content exceeds 2000
+          chars with a compact ``[trimmed]`` summary.
+        - Replaces any ``user`` role message that consists entirely of
+          injected ``image_url`` parts with a text-only note, dropping
+          the heavy base64 data.
+        """
+        trimmed_count = 0
+        for i, msg in enumerate(messages):
+            role = msg.get("role")
+
+            # Trim large tool results
+            if role == "tool":
+                content = msg.get("content", "")
+                if isinstance(content, str) and len(content) > 2000:
+                    # Keep first 500 chars as a summary
+                    msg["content"] = content[:500] + "\n...[trimmed to save context]"
+                    trimmed_count += 1
+
+            # Drop injected images (user messages that are lists with image_url)
+            if role == "user" and isinstance(msg.get("content"), list):
+                parts = msg["content"]
+                has_image = any(
+                    isinstance(p, dict) and p.get("type") == "image_url"
+                    for p in parts
+                )
+                if has_image:
+                    # Keep only text parts, drop image_url parts
+                    text_parts = [
+                        p for p in parts
+                        if isinstance(p, dict) and p.get("type") == "text"
+                    ]
+                    if not text_parts:
+                        text_parts = [{"type": "text", "text": "[images removed to save context]"}]
+                    msg["content"] = text_parts
+                    trimmed_count += 1
+
+        if trimmed_count:
+            log.info("context_trimmed", trimmed_messages=trimmed_count)
+
+    # ------------------------------------------------------------------
+    # Image resizing helper (for tool-result interception)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resize_base64_for_context(b64: str, max_width: int = 800) -> str:
+        """Resize a base64 image to *max_width* px JPEG for context efficiency."""
+        if not b64:
+            return b64
+        try:
+            import base64
+            import io
+            from PIL import Image
+
+            img_bytes = base64.b64decode(b64)
+            img = Image.open(io.BytesIO(img_bytes))
+
+            if img.width <= max_width:
+                # Still convert to JPEG for size
+                buf = io.BytesIO()
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.save(buf, format="JPEG", quality=80)
+                return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+            ratio = max_width / img.width
+            new_h = int(img.height * ratio)
+            img = img.resize((max_width, new_h), Image.LANCZOS)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=80)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+        except Exception:
+            return b64
 
     # ------------------------------------------------------------------
     # LLM call with exponential backoff

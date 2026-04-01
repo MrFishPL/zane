@@ -20,6 +20,8 @@ from agent_runner import AgentRunner
 
 log = structlog.get_logger()
 
+DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+
 # Redis keys
 QUEUE_TASKS = "agent:tasks"
 QUEUE_PROCESSING = "agent:processing"
@@ -291,10 +293,10 @@ class AgentWorker:
                     att_type = "image"
 
             if att_type == "pdf":
-                # Two-phase PDF processing:
-                # 1. Render all pages, extract text from ALL, build page index
-                # 2. Include only top schematic images (max 3) + full text + page index
-                # Agent can request more pages via get_image_base64 tool
+                # PDF processing strategy:
+                # 1. Render all pages, extract ALL text (no truncation — text is cheap)
+                # 2. Include max 2 schematic images at 800px JPEG for visual reference
+                # 3. Build page index so agent can request more via get_image_base64
                 try:
                     minio_path = path if path.startswith("minio://") else f"minio://{path}"
                     raw_pages = await router.call_tool("render_pdf_pages", {"pdf_path": minio_path})
@@ -323,7 +325,9 @@ class AgentWorker:
                         if classification != "text":
                             schematic_pages.append((page_path, page_num))
 
-                    # Extract text from ALL pages (cheap, gives component values)
+                    # Extract text from ALL pages — no truncation.
+                    # Text is cheap (~5K tokens for a 17-page PDF) and contains
+                    # critical component values that images alone cannot provide.
                     pdf_text_parts = []
                     for page_info in all_page_index:
                         pn = page_info["page"]
@@ -340,19 +344,19 @@ class AgentWorker:
                                 if text_content and len(text_content.strip()) > 30:
                                     preview = text_content.strip()[:200]
                                     pdf_text_parts.append(f"[Page {pn}] {text_content.strip()}")
-                                    all_page_index[pn - 1]["text_preview"] = preview if pn <= len(all_page_index) else ""
+                                    if pn <= len(all_page_index):
+                                        all_page_index[pn - 1]["text_preview"] = preview
                         except Exception:
                             pass
 
                     if pdf_text_parts:
                         combined_text = "\n\n".join(pdf_text_parts)
-                        if len(combined_text) > 12000:
-                            combined_text = combined_text[:12000] + "\n[...truncated]"
+                        # No truncation — include ALL extracted text
                         enriched.append({"type": "text", "content": combined_text})
                         log.info("pdf_text_extracted", pages=len(pdf_text_parts),
                                  chars=len(combined_text))
 
-                    # Include max 2 schematic images, resized to save context
+                    # Include max 2 schematic images, resized to 800px JPEG
                     for page_path, page_num in schematic_pages[:2]:
                         try:
                             raw_b64 = await router.call_tool(
@@ -363,8 +367,8 @@ class AgentWorker:
                                 b64 = parsed_b64.get("base64", "")
                             else:
                                 b64 = raw_b64
-                            # Resize to max 1200px wide to stay within context limits
-                            b64 = self._resize_base64(b64, max_width=1200)
+                            # Resize to 800px wide JPEG — keeps images small
+                            b64 = self._resize_base64(b64, max_width=800)
                             enriched.append({"type": "image", "path": page_path, "base64": b64})
                         except Exception:
                             log.error("page_base64_failed", page=page_path, exc_info=True)
@@ -381,7 +385,7 @@ class AgentWorker:
 
                     log.info("pdf_processed", total_pages=len(page_list),
                              schematics=len(schematic_pages),
-                             images_included=min(3, len(schematic_pages)),
+                             images_included=min(2, len(schematic_pages)),
                              text_pages=len(pdf_text_parts))
 
                 except Exception:
@@ -488,8 +492,8 @@ class AgentWorker:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _resize_base64(b64: str, max_width: int = 1600) -> str:
-        """Resize a base64 PNG/JPEG to max_width, return new base64."""
+    def _resize_base64(b64: str, max_width: int = 800) -> str:
+        """Resize a base64 image to *max_width* px JPEG for context efficiency."""
         if not b64:
             return b64
         try:
@@ -500,15 +504,16 @@ class AgentWorker:
             img_bytes = base64.b64decode(b64)
             img = Image.open(io.BytesIO(img_bytes))
 
-            if img.width <= max_width:
-                return b64  # already small enough
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
 
-            ratio = max_width / img.width
-            new_h = int(img.height * ratio)
-            img = img.resize((max_width, new_h), Image.LANCZOS)
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_h = int(img.height * ratio)
+                img = img.resize((max_width, new_h), Image.LANCZOS)
 
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=85)
+            img.save(buf, format="JPEG", quality=80)
             return base64.b64encode(buf.getvalue()).decode("utf-8")
         except Exception:
             return b64  # return original on any error
