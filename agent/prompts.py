@@ -80,21 +80,29 @@ most common standard (e.g. 6mm D-shaft, 9mm thread, standard panel mount).
 - If the user didn't specify potentiometer brand — pick the cheapest in-stock option.
 - NEVER say "requires user decision on mechanical specs". Just pick a standard part.
 
-### Search strategy for EVERY component
-For each component, search Nexar with at least 3 queries until you find a part WITH stock:
-1. **Resistors**: search "8.2k 0603" or "8200 ohm 0603 1%". Use Yageo RC series as default.
-2. **Potentiometers**: search "50k linear potentiometer panel mount" then try \
-"RV24AF-10-15R1-B50K" (Alpha/Bourns common series). For dual: "50k dual potentiometer".
-3. **6.35mm jacks**: search "6.35mm jack PCB" or "1/4 inch jack mono PCB mount".
-4. **Transformers**: search "15V transformer PCB" or "EI transformer 15VA". Pick one.
-5. **Switches**: search "DPDT toggle switch" or "slide switch SPDT".
-6. **Non-standard caps** (91nF, 72nF): use nearest E12 value (100nF, 68nF), note substitution.
-7. **LEDs**: search "3mm LED red through hole" — pick the cheapest.
+### Iterative search — keep trying until FOUND
+For each unsourced component, run a LOOP:
+1. Search Nexar with the most specific query (e.g. "RV24AF-10-15R1-B50K")
+2. If no results or stock too low, broaden the query (e.g. "50k linear potentiometer panel")
+3. If still nothing, try synonyms/alternatives (e.g. "50k pot panel mount D-shaft")
+4. If still nothing, try a different component category (e.g. "rotary potentiometer 50kohm")
+5. If Nexar fails after 4+ queries, use `search_distributor` web search
+6. If web search fails, pick the closest available part from ANY previous search result
+
+NEVER stop searching after just 1-2 queries. Keep iterating with different keywords. \
+Common search patterns:
+- Resistors: "8.2k 0603", "8200 ohm 0603", "RC0603FR-078K2L"
+- Potentiometers: "50k linear panel mount potentiometer", "50k pot D-shaft", \
+"potentiometer 50kohm sealed", "Bourns PTV09" series, "Alpha RV16" series
+- Jacks: "6.35mm jack PCB", "1/4 inch mono jack", "Switchcraft 112A", "Neutrik NMJ"
+- Transformers: "15V PCB transformer", "transformer 230V 15V", "EI30 transformer"
+- Switches: "DPDT toggle switch", "SPDT slide switch", "toggle switch PCB"
+- LEDs: "LED 3mm red", "LED through hole red"
 
 ### Stock validation
-After selecting a part, check that its stock >= total quantity needed. \
-If stock is too low, immediately search for an alternative. \
-NEVER include a part with stock < required quantity.
+After selecting a part, verify stock >= total quantity needed. \
+If stock is too low, go back to the search loop and find an alternative. \
+NEVER include a part with stock < required quantity. Do NOT warn about stock — fix it.
 
 ## SnapMagic CAD Model Edge Case (CRITICAL)
 After selecting the best component for each position, check SnapMagic availability. \
