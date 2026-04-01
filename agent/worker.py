@@ -220,8 +220,11 @@ class AgentWorker:
                 on_status=_on_status,
             )
 
-            # If recommendation, generate exports deterministically
+            # Post-processing: fix low stock and not-sourced items
             if result.get("status") == "recommendation":
+                result = await self._fix_sourcing_issues(
+                    result, conversation_id, task_id, _on_status
+                )
                 await self._generate_exports(
                     result, conversation_id, task_id, _on_status
                 )
@@ -414,6 +417,163 @@ class AgentWorker:
 
     # ------------------------------------------------------------------
     # Export generation (deterministic, not LLM-driven)
+    # ------------------------------------------------------------------
+
+    async def _fix_sourcing_issues(
+        self,
+        result: dict[str, Any],
+        conversation_id: str,
+        task_id: str,
+        on_status: Any,
+    ) -> dict[str, Any]:
+        """Deterministic post-processing: fix low stock and not-sourced items.
+
+        For each problem component, re-runs a focused agent search (up to 3 retries).
+        Only re-sources the specific failing items, not the whole BOM.
+        """
+        assert self._runner is not None
+        data = result.get("data", {})
+        components = data.get("components", [])
+        not_sourced = data.get("not_sourced", [])
+        volume = data.get("bom_summary", {}).get("volume", 1)
+        total_qty_multiplier = volume
+
+        # Collect problems: low stock components + not-sourced items
+        problems: list[dict[str, Any]] = []
+
+        for comp in components:
+            stock = comp.get("stock", 0) or 0
+            qty_needed = (comp.get("qty_per_unit", 1) or 1) * total_qty_multiplier
+            if stock < qty_needed:
+                problems.append({
+                    "type": "low_stock",
+                    "ref": comp.get("ref", ""),
+                    "description": comp.get("description", ""),
+                    "mpn": comp.get("mpn", ""),
+                    "needed": qty_needed,
+                    "current_stock": stock,
+                })
+
+        for ns in not_sourced:
+            item_desc = ns if isinstance(ns, str) else ns.get("item", str(ns))
+            problems.append({
+                "type": "not_sourced",
+                "description": item_desc,
+            })
+
+        if not problems:
+            log.info("fix_sourcing.no_issues")
+            return result
+
+        log.info("fix_sourcing.found_issues", count=len(problems))
+
+        # Retry up to 3 times for each batch of problems
+        for attempt in range(3):
+            if not problems:
+                break
+
+            if on_status:
+                await on_status(
+                    f"Fixing {len(problems)} sourcing issue(s) (attempt {attempt + 1}/3)..."
+                )
+
+            # Build a focused search prompt for the failing items
+            problem_descriptions = []
+            for p in problems:
+                if p["type"] == "low_stock":
+                    problem_descriptions.append(
+                        f"- {p['ref']}: {p['description']} (MPN {p['mpn']} has only "
+                        f"{p['current_stock']} stock, need {p['needed']}). "
+                        f"Find an alternative with stock >= {p['needed']}."
+                    )
+                else:
+                    problem_descriptions.append(
+                        f"- NOT SOURCED: {p['description']}. "
+                        f"Search Nexar with multiple queries and find a real purchasable MPN."
+                    )
+
+            fix_prompt = (
+                "The following components from the BOM need to be re-sourced. "
+                "For each one, search Nexar with multiple different queries until you find "
+                "a part with sufficient stock. Return ONLY a JSON array of fixed components "
+                "in the same format as the BOM components array. "
+                "Do NOT include components that don't need fixing.\n\n"
+                + "\n".join(problem_descriptions)
+            )
+
+            try:
+                fix_result = await self._runner.run(
+                    user_message=fix_prompt,
+                    conversation_history=None,
+                    attachments=None,
+                    conversation_id=conversation_id,
+                    on_status=None,
+                )
+
+                fix_data = fix_result.get("data", {})
+                fixed_components = fix_data.get("components", [])
+
+                if not fixed_components:
+                    log.info("fix_sourcing.no_fixes", attempt=attempt + 1)
+                    continue
+
+                # Apply fixes to the original result
+                remaining_problems: list[dict[str, Any]] = []
+                for p in problems:
+                    fixed = False
+                    for fc in fixed_components:
+                        fc_ref = fc.get("ref", "")
+                        fc_desc = fc.get("description", "")
+                        fc_stock = fc.get("stock", 0) or 0
+                        fc_mpn = fc.get("mpn", "")
+
+                        if not fc_mpn:
+                            continue
+
+                        if p["type"] == "low_stock" and fc_ref == p["ref"]:
+                            qty_needed = p["needed"]
+                            if fc_stock >= qty_needed:
+                                # Replace the component in the BOM
+                                for i, c in enumerate(components):
+                                    if c.get("ref") == p["ref"]:
+                                        components[i] = {**c, **fc}
+                                        fixed = True
+                                        break
+                        elif p["type"] == "not_sourced":
+                            # Check if this fixed component matches the not-sourced description
+                            if any(word in fc_desc.lower() for word in p["description"].lower().split()[:3]):
+                                components.append(fc)
+                                # Remove from not_sourced
+                                not_sourced = [
+                                    ns for ns in not_sourced
+                                    if (ns if isinstance(ns, str) else ns.get("item", "")) != p["description"]
+                                ]
+                                fixed = True
+
+                    if not fixed:
+                        remaining_problems.append(p)
+
+                problems = remaining_problems
+                log.info("fix_sourcing.progress", attempt=attempt + 1,
+                         fixed=len(problems) == 0, remaining=len(problems))
+
+            except Exception:
+                log.error("fix_sourcing.attempt_failed", attempt=attempt + 1, exc_info=True)
+
+        # Update the result
+        data["components"] = components
+        data["not_sourced"] = not_sourced
+        if data.get("bom_summary"):
+            data["bom_summary"]["unique_parts"] = len(components)
+
+        if problems:
+            log.warning("fix_sourcing.unresolved", count=len(problems),
+                        items=[p.get("description", p.get("ref", "?")) for p in problems])
+        else:
+            log.info("fix_sourcing.all_resolved")
+
+        return result
+
     # ------------------------------------------------------------------
 
     async def _generate_exports(
