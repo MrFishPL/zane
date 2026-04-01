@@ -162,6 +162,20 @@ async def handle_status_update(
         )
         log.info("task_manager.task.completed", task_id=task_id)
 
+    elif update_type == "decision_required":
+        # Save as assistant message but don't mark task completed — it's paused
+        content = update.get("content", "")
+        supabase_client.create_message(
+            conversation_id,
+            role="assistant",
+            content=content,
+        )
+        supabase_client.update_agent_task(
+            task_id,
+            current_status="Waiting for your decision...",
+        )
+        log.info("task_manager.task.decision_required", task_id=task_id)
+
     elif update_type == "error":
         error_msg = update.get("error", "Unknown error")
         supabase_client.update_agent_task(

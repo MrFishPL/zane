@@ -189,18 +189,22 @@ async def _listen_for_result(task_id: str, conversation_id: str) -> None:
             if msg_task_id != task_id:
                 continue
 
-            if msg_type in ("result", "error"):
+            if msg_type in ("result", "error", "decision_required"):
                 update = {"type": msg_type}
                 if msg_type == "result":
                     update["content"] = data.get("data", "")
                 elif msg_type == "error":
                     update["error"] = data.get("error", "")
+                elif msg_type == "decision_required":
+                    update["content"] = data.get("data", "")
                 try:
                     await task_manager.handle_status_update(task_id, conversation_id, update)
                     log.info("messages.result_listener.saved", task_id=task_id, type=msg_type)
                 except Exception as exc:
                     log.error("messages.result_listener.save_failed", task_id=task_id, error=str(exc))
-                break
+                # Don't break on decision_required — keep listening for the final result after resume
+                if msg_type != "decision_required":
+                    break
             elif msg_type == "status":
                 update = {"type": "status", "current_status": data.get("text", "")}
                 try:
