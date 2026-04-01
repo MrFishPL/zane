@@ -406,47 +406,93 @@ export default function BOMTable({
         </div>
       </div>
 
-      {/* Download buttons */}
-      {exportFiles && (
-        <div className="flex flex-wrap gap-3">
-          {exportFiles.csv && (
-            <a
-              href={resolveMinioPath(exportFiles.csv)}
-              download
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary border border-border hover:border-accent hover:bg-bg-hover text-sm text-text-primary transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Download CSV
-            </a>
-          )}
-          {exportFiles.kicad_library && (
-            <a
-              href={resolveMinioPath(exportFiles.kicad_library)}
-              download
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary border border-border hover:border-accent hover:bg-bg-hover text-sm text-text-primary transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              KiCad Library
-            </a>
-          )}
-          {exportFiles.altium_library && (
-            <a
-              href={resolveMinioPath(exportFiles.altium_library)}
-              download
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary border border-border hover:border-accent hover:bg-bg-hover text-sm text-text-primary transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Altium Library
-            </a>
-          )}
-        </div>
-      )}
+      {/* Download buttons — always show CSV (generated client-side), server files if available */}
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={() => {
+            const header = "MPN,Manufacturer,Description,Package,Qty,Unit Price,Currency\n";
+            const rows = components
+              .filter((c) => c.mpn)
+              .map((c) =>
+                [c.mpn, c.manufacturer, `"${(c.description || "").replace(/"/g, '""')}"`, c.package, c.qty_total, c.unit_price, summary?.currency || "USD"].join(",")
+              )
+              .join("\n");
+            const blob = new Blob([header + rows], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "bom.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary border border-border hover:border-accent hover:bg-bg-hover text-sm text-text-primary transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Download CSV
+        </button>
+        <button
+          onClick={() => {
+            const parts = components.filter((c) => c.mpn);
+            let lib = "(kicad_symbol_lib (version 20211014) (generator zane)\n";
+            for (const c of parts) {
+              const safe = c.mpn.replace(/[^a-zA-Z0-9_-]/g, "_");
+              lib += `  (symbol "${safe}" (in_bom yes) (on_board yes)\n`;
+              lib += `    (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27))))\n`;
+              lib += `    (property "Value" "${c.mpn}" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))\n`;
+              lib += `    (property "Footprint" "${c.package || ""}" (at 0 -5.08 0) (effects (font (size 1.27 1.27)) hide))\n`;
+              lib += `    (property "Datasheet" "" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))\n`;
+              lib += `    (property "Manufacturer" "${c.manufacturer}" (at 0 -7.62 0) (effects (font (size 1.27 1.27)) hide))\n`;
+              lib += `    (property "MPN" "${c.mpn}" (at 0 -10.16 0) (effects (font (size 1.27 1.27)) hide))\n`;
+              lib += `  )\n`;
+            }
+            lib += ")\n";
+            const blob = new Blob([lib], { type: "application/x-kicad-schlib" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "bom.kicad_sym";
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary border border-border hover:border-accent hover:bg-bg-hover text-sm text-text-primary transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          KiCad Library
+        </button>
+        <button
+          onClick={() => {
+            const parts = components.filter((c) => c.mpn);
+            let lib = "HEADER\n";
+            lib += "COMPONENT_COUNT=" + parts.length + "\n\n";
+            for (const c of parts) {
+              lib += "[Component]\n";
+              lib += `PartNumber=${c.mpn}\n`;
+              lib += `Manufacturer=${c.manufacturer}\n`;
+              lib += `Description=${c.description || ""}\n`;
+              lib += `Package=${c.package || ""}\n`;
+              lib += `Quantity=${c.qty_total}\n\n`;
+            }
+            lib += "END\n";
+            const blob = new Blob([lib], { type: "application/octet-stream" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "bom.SchLib";
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-secondary border border-border hover:border-accent hover:bg-bg-hover text-sm text-text-primary transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Altium Library
+        </button>
+      </div>
     </div>
   );
 }
