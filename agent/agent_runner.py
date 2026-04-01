@@ -22,7 +22,7 @@ log = structlog.get_logger()
 
 MODEL = "gpt-5.4"
 MAX_LLM_RETRIES = 3
-LLM_TIMEOUT_BASE = 30  # seconds; doubles on each retry
+LLM_TIMEOUT_BASE = 60  # seconds; doubles on each retry (60, 120, 240)
 
 # ---------------------------------------------------------------------------
 # Tool definitions (OpenAI function-calling format)
