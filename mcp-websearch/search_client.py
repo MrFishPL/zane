@@ -1,4 +1,4 @@
-"""Web search client using LiteLLM for component lookups."""
+"""Web search client using OpenAI API for component lookups."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ import structlog
 
 log = structlog.get_logger()
 
-LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://litellm-proxy:4000")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = "https://api.openai.com/v1"
 MODEL = "gpt-4o-mini"
 REQUEST_TIMEOUT = 30.0
 
@@ -84,7 +85,7 @@ def _build_chat_payload(
         "temperature": 0.1,
     }
     if use_web_search:
-        payload["tools"] = [{"type": "web_search"}]
+        payload["tools"] = [{"type": "web_search_preview"}]
     return payload
 
 
@@ -104,20 +105,24 @@ async def _call_llm(
     user_prompt: str,
     use_web_search: bool = True,
 ) -> dict[str, Any]:
-    """Call LiteLLM and return parsed JSON response.
+    """Call OpenAI API and return parsed JSON response.
 
-    Tries with web_search tool first. If the API rejects it (e.g. tool not
-    supported), retries without the tool so the LLM answers from training data.
+    Tries with web_search_preview tool first. If the API rejects it (e.g. tool
+    not supported), retries without the tool so the LLM answers from training data.
     """
     payload = _build_chat_payload(system_prompt, user_prompt, use_web_search)
-    url = f"{LITELLM_BASE_URL}/v1/chat/completions"
+    url = f"{OPENAI_BASE_URL}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            # If web_search tool is rejected, retry without it
+            # If web_search_preview tool is rejected, retry without it
             if use_web_search and exc.response.status_code in (400, 422):
                 log.warning(
                     "web_search_not_available",
@@ -125,7 +130,7 @@ async def _call_llm(
                     detail="Falling back to LLM training data",
                 )
                 payload = _build_chat_payload(system_prompt, user_prompt, use_web_search=False)
-                resp = await client.post(url, json=payload)
+                resp = await client.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
             else:
                 raise

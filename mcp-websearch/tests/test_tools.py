@@ -30,7 +30,7 @@ def _mock_response(fixture_name: str, status_code: int = 200) -> httpx.Response:
     return httpx.Response(
         status_code=status_code,
         json=data,
-        request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
     )
 
 
@@ -227,7 +227,7 @@ async def test_search_invalid_json():
                 }
             ]
         },
-        request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
     )
     with patch("search_client.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
@@ -256,7 +256,7 @@ async def test_fetch_invalid_json():
                 }
             ]
         },
-        request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
     )
     with patch("search_client.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
@@ -321,7 +321,7 @@ async def test_web_search_fallback():
     error_response = httpx.Response(
         status_code=400,
         json={"error": "web_search tool not supported"},
-        request=httpx.Request("POST", "http://test/v1/chat/completions"),
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
     )
     success_response = _mock_response("search_mouser_stm32.json")
 
@@ -366,3 +366,72 @@ def test_parse_json_with_whitespace():
     """Test parsing JSON with leading/trailing whitespace."""
     text = '  \n  {"results": []}  \n  '
     assert search_client._parse_json_response(text) == {"results": []}
+
+
+# ---------------------------------------------------------------------------
+# OpenAI API integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_uses_openai_api_endpoint():
+    """Verify that requests are sent to OpenAI API directly, not LiteLLM."""
+    mock_resp = _mock_response("search_mouser_stm32.json")
+    with patch("search_client.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.post.return_value = mock_resp
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = instance
+
+        await search_client.search_distributor("STM32F103C8T6", "mouser.com")
+
+        # Verify the URL points to OpenAI, not LiteLLM
+        call_args = instance.post.call_args
+        assert call_args[0][0] == "https://api.openai.com/v1/chat/completions"
+
+
+@pytest.mark.asyncio
+async def test_sends_openai_auth_header():
+    """Verify that the Authorization header uses OPENAI_API_KEY."""
+    mock_resp = _mock_response("search_mouser_stm32.json")
+    test_api_key = "sk-test-key-12345"
+    with patch("search_client.OPENAI_API_KEY", test_api_key), \
+         patch("search_client.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.post.return_value = mock_resp
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = instance
+
+        await search_client.search_distributor("STM32F103C8T6", "mouser.com")
+
+        call_args = instance.post.call_args
+        headers = call_args[1]["headers"]
+        assert headers["Authorization"] == f"Bearer {test_api_key}"
+        assert headers["Content-Type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_uses_web_search_preview_tool():
+    """Verify that the web_search_preview tool type is used instead of web_search."""
+    mock_resp = _mock_response("search_mouser_stm32.json")
+    with patch("search_client.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.post.return_value = mock_resp
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = instance
+
+        await search_client.search_distributor("STM32F103C8T6", "mouser.com")
+
+        call_args = instance.post.call_args
+        payload = call_args[1]["json"] if "json" in call_args[1] else call_args[0][1]
+        tools = payload.get("tools", [])
+        assert len(tools) == 1
+        assert tools[0]["type"] == "web_search_preview"
+
+
+def test_no_litellm_references():
+    """Verify that search_client no longer references LITELLM_BASE_URL."""
+    assert not hasattr(search_client, "LITELLM_BASE_URL")
