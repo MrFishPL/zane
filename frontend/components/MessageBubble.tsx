@@ -319,24 +319,81 @@ function DecisionRequiredView({
   messageTxt: string;
   conversationId?: string;
 }) {
+  const decisions: Decision[] =
+    data?.decisions && Array.isArray(data.decisions)
+      ? (data.decisions as Decision[])
+      : [];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const total = decisions.length;
+  const current = decisions[currentIndex];
+
+  const handleDecisionMade = () => {
+    if (current) {
+      setResolved((prev) => new Set(prev).add(current.decision_id));
+    }
+    // Auto-advance to next unresolved after short delay
+    setTimeout(() => {
+      if (currentIndex < total - 1) {
+        setCurrentIndex((i) => i + 1);
+      }
+    }, 400);
+  };
+
+  if (!total || !conversationId) return null;
+
   return (
     <div className="space-y-3">
       {messageTxt && (
-        <p className="text-sm text-text-primary leading-relaxed">
+        <p className="text-sm text-text-primary leading-relaxed mb-3">
           {messageTxt}
         </p>
       )}
-      {data?.decisions &&
-        Array.isArray(data.decisions) &&
-        conversationId &&
-        data.decisions.map((d: JsonData) => (
-          <DecisionCard
-            key={d.decision_id}
-            decision={d as Decision}
-            conversationId={conversationId}
-            taskId={data.task_id || ""}
+
+      {/* Progress bar */}
+      <div className="flex items-center gap-2 mb-1">
+        <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-accent rounded-full transition-all duration-300"
+            style={{ width: `${(resolved.size / total) * 100}%` }}
           />
-        ))}
+        </div>
+        <span className="text-xs text-text-muted shrink-0">
+          {resolved.size}/{total}
+        </span>
+      </div>
+
+      {/* Current decision card */}
+      {current && (
+        <DecisionCard
+          key={current.decision_id}
+          decision={current}
+          conversationId={conversationId}
+          taskId={data.task_id || ""}
+          onDecisionMade={handleDecisionMade}
+        />
+      )}
+
+      {/* Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+          disabled={currentIndex === 0}
+          className="px-3 py-1 rounded text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          Prev
+        </button>
+        <span className="text-xs text-text-muted">
+          {currentIndex + 1} / {total}
+        </span>
+        <button
+          onClick={() => setCurrentIndex((i) => Math.min(total - 1, i + 1))}
+          disabled={currentIndex === total - 1}
+          className="px-3 py-1 rounded text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }
