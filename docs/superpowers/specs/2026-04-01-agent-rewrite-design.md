@@ -93,27 +93,33 @@ Each sub-agent:
 - Returns a structured result or "not_found" with reason
 
 Sub-agent tool set (via MCPRouter):
-- `search_parts(query)` — keyword search on Nexar/Octopart (mcp-nexar)
-- `search_mpn(mpn)` — exact MPN lookup (mcp-nexar)
-- `check_lifecycle(mpn)` — verify active/NRND/obsolete status (mcp-nexar)
+- `search_parts(query)` — keyword search via `supSearch` (mcp-nexar)
+- `search_mpn(mpn)` — MPN lookup via `supSearchMpn` (mcp-nexar) — currently uses `supSearch`, must be changed to `supSearchMpn` for better MPN matching
 - `search_distributor(query, site)` — web search fallback (mcp-websearch, only when Nexar returns nothing)
 - `fetch_product_page(url)` — extract data from distributor page (mcp-websearch, fallback only)
 
 Excluded mcp-nexar tools (intentional):
-- `multi_match` — not needed since sub-agents search one component at a time
+- `check_lifecycle` — REMOVED. Requires `specs` field which is behind TECH_SPECS paywall (unauthorized on current plan). Will always return "unknown". Lifecycle filtering is not possible with current subscription.
+- `multi_match` — not exposed to sub-agents (they search one component at a time), but see Phase 3 optimization below
 - `get_part_details` — `search_mpn` already returns sufficient detail
-- `check_stock` — stock data is included in `search_parts`/`search_mpn` responses
-- `get_quota_status` — not exposed to sub-agents, but the orchestrator calls it once before Phase 3 as a pre-flight check. If remaining quota is low, it reduces the sub-agent concurrency semaphore accordingly.
+- `check_stock` — stock data is included via `totalAvail` field + per-seller `inventoryLevel`
+- `get_quota_status` — not exposed to sub-agents; orchestrator calls it once before Phase 3
 
-Note: `check_lifecycle` is currently NOT in MCPRouter's `_TOOL_SERVER_MAP`. Adding `"check_lifecycle": "mcp-nexar"` is a required change to `mcp_router.py`.
+**Phase 3 optimization: batch pre-search with `supMultiMatch`**
+
+Before dispatching individual sub-agents, the orchestrator can batch-search all components that have a known MPN (from schematic analysis) using the native `supMultiMatch` GraphQL query. This:
+- Returns 3 parts per MPN in a single API call (vs 5 per individual search)
+- Consumes fewer parts from monthly quota
+- Provides instant results for components with exact MPNs
+
+Components found via `supMultiMatch` skip the sub-agent tool loop entirely. Only components without a clear MPN or that were not found in the batch go through sub-agent search.
 
 Sub-agent search strategy:
-1. Search Nexar by description/value/package
-2. Evaluate results against constraints (price, stock, specs)
-3. Check lifecycle status — reject NRND/obsolete parts
-4. If no good match, try different keywords or broaden search
-5. If still nothing, try web search fallback via mcp-websearch
-6. Return best match with full pricing/stock data
+1. Search Nexar by description/value/package via `supSearch`
+2. Evaluate results using `shortDescription` and LLM knowledge (note: `specs` field is unauthorized, so constraints cannot be verified via API — the LLM must reason about the description)
+3. If no good match, try different keywords or broaden search
+4. If still nothing, try web search fallback via mcp-websearch
+5. Return best match with full pricing/stock data
 
 Error handling per sub-agent:
 - Timeout → return `{"status": "error", "ref": "U1", "reason": "search timed out"}`
@@ -127,14 +133,16 @@ Sub-agent output:
   "ref": "U1",
   "mpn": "OPA1612AIDR",
   "manufacturer": "Texas Instruments",
-  "description": "Low-Noise Audio Op-Amp, SOIC-8",
-  "unit_price": 3.42,
+  "description": "Operational Amplifier, 2 Func, 500uV Offset-Max, BIPolar, PDSO8",
+  "unit_price": 4.23,
   "currency": "USD",
-  "stock": 15230,
-  "distributor": "Mouser",
-  "distributor_url": "https://...",
-  "datasheet_url": "https://...",
-  "constraints_met": {"noise": "1.1 nV/rtHz", "supply": "+/-18V max"}
+  "total_stock": 725546,
+  "distributor": "DigiKey",
+  "distributor_stock": 8674,
+  "distributor_url": "https://octopart.com/opatz8j6/...",
+  "octopart_url": "https://octopart.com/part/texas-instruments/OPA1612AIDR",
+  "median_price_1000": {"price": 4.23, "currency": "USD"},
+  "constraints_reasoning": "shortDescription confirms dual op-amp in SOIC-8; TI OPA1612 datasheet specifies 1.1 nV/rtHz noise"
 }
 ```
 
@@ -292,12 +300,70 @@ Worker (decision listener)
 
 State is serialized to Redis hash so the orchestrator can resume after container restarts. On startup, worker checks `agent:paused` for any interrupted tasks.
 
+## Nexar API: Verified Behavior (Live-Tested April 2026)
+
+### Subscription Limitations (Current Plan)
+
+Fields tested and confirmed **UNAUTHORIZED**:
+- `specs` — requires TECH_SPECS add-on ("Please upgrade your Nexar subscription")
+- `bestDatasheet` — requires DATASHEETS add-on
+- `bestImage` — requires DATASHEETS add-on
+- `similarParts` — requires ENTERPRISE plan
+
+Fields confirmed **AVAILABLE**:
+- `mpn`, `manufacturer { name }`, `shortDescription`
+- `medianPrice1000 { price currency }`
+- `totalAvail` (global stock count)
+- `sellers { company { name } isAuthorized offers { inventoryLevel moq sku prices { quantity price currency convertedPrice convertedCurrency } clickUrl } }`
+- `category { name path }`
+- `octopartUrl` (direct link to Octopart listing)
+- `sellers(authorizedOnly: true)` filter works
+
+### Query Types Tested
+
+| Query | Best For | Parts/Query |
+|-------|----------|-------------|
+| `supSearch(q, limit)` | Keyword/description search ("10kohm resistor 0603") | limit (default 10) |
+| `supSearchMpn(q, limit)` | MPN lookup ("OPA1612AIDR") — better matching than supSearch | limit (default 10) |
+| `supMultiMatch(queries)` | Batch MPN lookup — single query for N MPNs | 3 per MPN (default) |
+
+### Key Findings
+
+1. **`supSearch` for MPN is unreliable** — searching "LM386" returns "LM386" by Universal Microelectronics (0 stock) instead of "LM386N-1/NOPB" by TI. Use `supSearchMpn` for MPN lookups.
+
+2. **`supMultiMatch` is significantly more quota-efficient** — returns default 3 parts per MPN vs 5-10 for individual queries. One HTTP request for all MPNs.
+
+3. **`country` and `currency` parameters work** — `country: "PL"` returns Polish distributors (Farnell, TME) with PLN prices. `currency: "EUR"` adds `convertedPrice`/`convertedCurrency` fields.
+
+4. **`totalAvail` gives instant global stock** — no need to sum individual seller inventories.
+
+5. **`shortDescription` is the only spec data available** — must rely on LLM knowledge + description to verify component constraints. Example: "Operational Amplifier, 2 Func, 500uV Offset-Max, BIPolar, PDSO8"
+
+6. **Current code bugs found:**
+   - `nexar_client.py` requests `specs` and `bestDatasheet` in SEARCH_QUERY but they always return `None` (unauthorized)
+   - `_compress_part()` builds empty specs array and null datasheet_url
+   - `check_lifecycle()` always returns "unknown" because lifecycle comes from `specs`
+   - `multi_match()` is a sequential loop of individual searches instead of using native `supMultiMatch`
+   - Both `search_parts()` and `search_mpn()` use the same `supSearch` query
+
+### Required mcp-nexar Changes
+
+1. **Replace `SEARCH_QUERY`** — remove `specs`, `bestDatasheet`. Add `totalAvail`, `category { name }`, `octopartUrl`, `sellers(authorizedOnly: true)`, `moq`, `sku`
+2. **Add `supSearchMpn` query** — use for `search_mpn()` method
+3. **Add native `supMultiMatch` query** — replace sequential loop in `multi_match()`
+4. **Add `country`/`currency` parameters** — pass through from environment or tool args
+5. **Remove `check_lifecycle` tool** — always returns "unknown" on current plan
+6. **Remove `KEY_SPECS` filtering** — specs are never available
+7. **Update `_compress_part()`** — include `totalAvail`, `octopartUrl`, `category`, remove dead `specs`/`datasheet_url` code
+
 ## MCP Server Changes
 
 ### Keep as-is
 - **mcp-documents** (:8003) — PDF rendering, image processing, text extraction
-- **mcp-nexar** (:8001) — Nexar/Octopart component search
 - **mcp-export** (:8005) — CSV/KiCad/Altium generation
+
+### Fix (mcp-nexar)
+- **mcp-nexar** (:8001) — Requires significant GraphQL query updates (see "Required mcp-nexar Changes" above). New queries for `supSearchMpn` and `supMultiMatch`. Remove dead code for unauthorized fields. Add country/currency support.
 
 ### Simplify
 - **mcp-snapmagic** (:8002) — Currently uses Tavily API (not LiteLLM) for web search against snapeda.com. Remove the unused `LITELLM_BASE_URL` env var. Keep Tavily as the search mechanism. Parallelize `check_cad_batch` internally.
