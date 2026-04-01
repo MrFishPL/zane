@@ -218,6 +218,12 @@ class AgentWorker:
                 on_status=_on_status,
             )
 
+            # If recommendation, generate exports deterministically
+            if result.get("status") == "recommendation":
+                await self._generate_exports(
+                    result, conversation_id, task_id, _on_status
+                )
+
             elapsed = time.monotonic() - started_at
             log.info(
                 "task_completed",
@@ -401,6 +407,81 @@ class AgentWorker:
                 enriched.append(att)
 
         return enriched
+
+    # ------------------------------------------------------------------
+    # Export generation (deterministic, not LLM-driven)
+    # ------------------------------------------------------------------
+
+    async def _generate_exports(
+        self,
+        result: dict[str, Any],
+        conversation_id: str,
+        task_id: str,
+        on_status: Any,
+    ) -> None:
+        """Generate CSV/KiCad/Altium exports after a recommendation."""
+        assert self._runner is not None
+        router = self._runner._router
+        data = result.get("data", {})
+        components = data.get("components", [])
+        if not components:
+            return
+
+        user_id = DEFAULT_USER_ID
+        volume = data.get("bom_summary", {}).get("volume", 1)
+        export_files: dict[str, str | None] = {"csv": None, "kicad_library": None, "altium_library": None}
+
+        # CSV
+        if on_status:
+            await on_status("Generating CSV export...")
+        try:
+            csv_comps = [{"mpn": c.get("mpn", ""), "qty_per_unit": c.get("qty_per_unit", 1)} for c in components]
+            csv_result = await router.call_tool("generate_csv", {
+                "components": csv_comps, "volume": volume,
+                "user_id": user_id, "conversation_id": conversation_id,
+            })
+            if isinstance(csv_result, str):
+                csv_result = json.loads(csv_result)
+            if isinstance(csv_result, dict):
+                export_files["csv"] = csv_result.get("path")
+            log.info("export_csv_ok", path=export_files["csv"])
+        except Exception:
+            log.error("export_csv_failed", exc_info=True)
+
+        # KiCad
+        if on_status:
+            await on_status("Generating KiCad library...")
+        try:
+            kicad_comps = [{"mpn": c.get("mpn", ""), "description": c.get("description", "")} for c in components]
+            kicad_result = await router.call_tool("generate_kicad_library", {
+                "components": kicad_comps, "user_id": user_id, "conversation_id": conversation_id,
+            })
+            if isinstance(kicad_result, str):
+                kicad_result = json.loads(kicad_result)
+            if isinstance(kicad_result, dict):
+                export_files["kicad_library"] = kicad_result.get("path")
+            log.info("export_kicad_ok", path=export_files["kicad_library"])
+        except Exception:
+            log.error("export_kicad_failed", exc_info=True)
+
+        # Altium
+        if on_status:
+            await on_status("Generating Altium library...")
+        try:
+            altium_comps = [{"mpn": c.get("mpn", ""), "description": c.get("description", "")} for c in components]
+            altium_result = await router.call_tool("generate_altium_library", {
+                "components": altium_comps, "user_id": user_id, "conversation_id": conversation_id,
+            })
+            if isinstance(altium_result, str):
+                altium_result = json.loads(altium_result)
+            if isinstance(altium_result, dict):
+                export_files["altium_library"] = altium_result.get("path")
+            log.info("export_altium_ok", path=export_files["altium_library"])
+        except Exception:
+            log.error("export_altium_failed", exc_info=True)
+
+        # Inject export paths into result
+        data["export_files"] = export_files
 
     # ------------------------------------------------------------------
     # Image resizing
