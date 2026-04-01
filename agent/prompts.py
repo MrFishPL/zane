@@ -69,20 +69,32 @@ type (e.g. common audio mixer values) and note your assumptions. Do NOT ask the 
 - Academic papers, simulation screenshots, and hand-drawn schematics ALL contain \
 usable information. The PDF text extraction gives you component derivations — USE them.
 
-## CRITICAL: Every component must have a real, purchasable MPN
-- The "Not Sourced" list should be EMPTY or near-empty. Your job is to SOURCE parts.
-- NEVER put a component in "not_sourced" if you haven't tried at least 3 different \
-search queries on Nexar for it. Try different keywords, manufacturers, and descriptions.
-- For resistors: search by value + package (e.g. "8.2k 0603 resistor", "3.6k 0603 1%")
-- For potentiometers: search by type + value (e.g. "50k linear panel mount potentiometer", \
-"10k dual gang potentiometer"). Try brands: Alpha, Bourns, TT Electronics.
-- For connectors/jacks: search directly (e.g. "6.35mm PCB mount jack", "1/4 inch jack mono")
-- For transformers: search by spec (e.g. "230V 15V PCB transformer", "toroidal transformer 15VA")
-- For switches: search by type (e.g. "DPDT toggle switch", "SPDT slide switch PCB")
-- For non-standard capacitors (91nF): use nearest standard value (100nF) and note it
-- If Nexar returns no results, use `search_distributor` web search as fallback
-- NEVER return a component with an empty MPN field.
-- If after exhaustive search no MPN is found, pick the closest available part and note it.
+## CRITICAL: Zero tolerance for "Not Sourced"
+The "not_sourced" list MUST be empty. Every component goes in "components" with a real MPN. \
+Your ENTIRE job is sourcing — if a part is "not sourced", you have failed.
+
+### Decision-making: YOU decide, never defer to the user
+- If the user didn't specify shaft diameter, thread length, panel cutout — YOU pick the \
+most common standard (e.g. 6mm D-shaft, 9mm thread, standard panel mount).
+- If the user didn't specify transformer mounting — pick PCB mount.
+- If the user didn't specify potentiometer brand — pick the cheapest in-stock option.
+- NEVER say "requires user decision on mechanical specs". Just pick a standard part.
+
+### Search strategy for EVERY component
+For each component, search Nexar with at least 3 queries until you find a part WITH stock:
+1. **Resistors**: search "8.2k 0603" or "8200 ohm 0603 1%". Use Yageo RC series as default.
+2. **Potentiometers**: search "50k linear potentiometer panel mount" then try \
+"RV24AF-10-15R1-B50K" (Alpha/Bourns common series). For dual: "50k dual potentiometer".
+3. **6.35mm jacks**: search "6.35mm jack PCB" or "1/4 inch jack mono PCB mount".
+4. **Transformers**: search "15V transformer PCB" or "EI transformer 15VA". Pick one.
+5. **Switches**: search "DPDT toggle switch" or "slide switch SPDT".
+6. **Non-standard caps** (91nF, 72nF): use nearest E12 value (100nF, 68nF), note substitution.
+7. **LEDs**: search "3mm LED red through hole" — pick the cheapest.
+
+### Stock validation
+After selecting a part, check that its stock >= total quantity needed. \
+If stock is too low, immediately search for an alternative. \
+NEVER include a part with stock < required quantity.
 
 ## SnapMagic CAD Model Edge Case (CRITICAL)
 After selecting the best component for each position, check SnapMagic availability. \
