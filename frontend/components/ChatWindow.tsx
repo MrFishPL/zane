@@ -18,6 +18,7 @@ interface ChatWindowProps {
   onRemoveUpload: (id: string) => void;
   onToggleSidebar: () => void;
   conversationTitle: string | null;
+  conversationId?: string;
 }
 
 export default function ChatWindow({
@@ -31,6 +32,7 @@ export default function ChatWindow({
   onRemoveUpload,
   onToggleSidebar,
   conversationTitle,
+  conversationId,
 }: ChatWindowProps) {
   const [inputText, setInputText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -137,7 +139,7 @@ export default function ChatWindow({
           /* Message list */
           <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble key={msg.id} message={msg} conversationId={conversationId} />
             ))}
             <div ref={messagesEndRef} />
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Message } from "@/lib/api";
-import { getFileUrl } from "@/lib/api";
+import { getFileUrl, sendDecision } from "@/lib/api";
 import AttachmentPreview from "./AttachmentPreview";
 import BOMTable from "./BOMTable";
 import { useState } from "react";
@@ -9,6 +9,7 @@ import ImageLightbox from "./ImageLightbox";
 
 interface MessageBubbleProps {
   message: Message;
+  conversationId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -236,10 +237,113 @@ function AnalysisView({ data, messageTxt }: { data: JsonData; messageTxt: string
 }
 
 // ---------------------------------------------------------------------------
+// Decision Card (interactive user-choice card)
+// ---------------------------------------------------------------------------
+
+interface DecisionOption {
+  key: string;
+  label: string;
+}
+
+interface Decision {
+  decision_id: string;
+  ref: string;
+  mpn: string;
+  question: string;
+  options: DecisionOption[];
+  chosen?: string;
+}
+
+function DecisionCard({
+  decision,
+  conversationId,
+  taskId,
+  onDecisionMade,
+}: {
+  decision: Decision;
+  conversationId: string;
+  taskId: string;
+  onDecisionMade?: () => void;
+}) {
+  const [selected, setSelected] = useState<string | undefined>(decision.chosen);
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async (key: string) => {
+    if (selected) return;
+    setLoading(true);
+    try {
+      await sendDecision(conversationId, taskId, decision.decision_id, key);
+      setSelected(key);
+      onDecisionMade?.();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 my-2 bg-amber-50 dark:bg-amber-950/20">
+      <p className="font-medium text-sm text-text-primary mb-1">
+        {decision.ref}: {decision.mpn}
+      </p>
+      <p className="text-sm text-text-secondary mb-3">{decision.question}</p>
+      <div className="flex gap-2 flex-wrap">
+        {decision.options.map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => handleClick(opt.key)}
+            disabled={!!selected || loading}
+            className={`px-3 py-1.5 rounded text-sm transition-colors ${
+              selected === opt.key
+                ? "bg-accent text-white"
+                : selected
+                  ? "bg-bg-tertiary text-text-muted cursor-not-allowed"
+                  : "bg-bg-primary border border-border hover:bg-accent/10 hover:border-accent/30"
+            }`}
+          >
+            {opt.key}: {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DecisionRequiredView({
+  data,
+  messageTxt,
+  conversationId,
+}: {
+  data: JsonData;
+  messageTxt: string;
+  conversationId?: string;
+}) {
+  return (
+    <div className="space-y-3">
+      {messageTxt && (
+        <p className="text-sm text-text-primary leading-relaxed">
+          {messageTxt}
+        </p>
+      )}
+      {data?.decisions &&
+        Array.isArray(data.decisions) &&
+        conversationId &&
+        data.decisions.map((d: JsonData) => (
+          <DecisionCard
+            key={d.decision_id}
+            decision={d as Decision}
+            conversationId={conversationId}
+            taskId={data.task_id || ""}
+          />
+        ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // MessageBubble
 // ---------------------------------------------------------------------------
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default function MessageBubble({ message, conversationId }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   // User message
@@ -318,6 +422,12 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             <AnalysisView
               data={parsed.data}
               messageTxt={parsed.message || ""}
+            />
+          ) : parsed.status === "decision_required" && parsed.data ? (
+            <DecisionRequiredView
+              data={parsed.data}
+              messageTxt={parsed.message || ""}
+              conversationId={conversationId}
             />
           ) : (
             <p className="text-sm text-text-primary whitespace-pre-wrap">
