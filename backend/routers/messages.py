@@ -84,6 +84,11 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
             _generate_title(conversation_id, body.content)
         )
 
+    # Background listener to persist agent results even without WebSocket
+    asyncio.create_task(
+        _listen_for_result(task["id"], conversation_id)
+    )
+
     return {
         "message": message,
         "task_id": task["id"],
@@ -132,3 +137,55 @@ async def _generate_title(conversation_id: str, first_message: str) -> None:
             conversation_id=conversation_id,
             error=str(exc),
         )
+
+
+async def _listen_for_result(task_id: str, conversation_id: str) -> None:
+    """Background listener: persist agent result even without WebSocket."""
+    import json as _json
+    from services import redis_client as _redis
+
+    try:
+        pubsub = await _redis.subscribe_status(conversation_id, callback=None)
+        timeout = 600  # 10 min max wait
+        import time
+        start = time.monotonic()
+
+        while time.monotonic() - start < timeout:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if not message or message.get("type") != "message":
+                continue
+
+            try:
+                data = _json.loads(message["data"])
+            except (ValueError, TypeError):
+                continue
+
+            msg_type = data.get("type")
+            msg_task_id = data.get("task_id")
+
+            if msg_task_id != task_id:
+                continue
+
+            if msg_type in ("result", "error"):
+                update = {"type": msg_type}
+                if msg_type == "result":
+                    update["content"] = data.get("data", "")
+                elif msg_type == "error":
+                    update["error"] = data.get("error", "")
+                try:
+                    await task_manager.handle_status_update(task_id, conversation_id, update)
+                    log.info("messages.result_listener.saved", task_id=task_id, type=msg_type)
+                except Exception as exc:
+                    log.error("messages.result_listener.save_failed", task_id=task_id, error=str(exc))
+                break
+            elif msg_type == "status":
+                update = {"type": "status", "current_status": data.get("text", "")}
+                try:
+                    await task_manager.handle_status_update(task_id, conversation_id, update)
+                except Exception:
+                    pass
+
+        await pubsub.unsubscribe()
+        await pubsub.close()
+    except Exception as exc:
+        log.warning("messages.result_listener.error", task_id=task_id, error=str(exc))
