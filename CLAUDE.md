@@ -8,18 +8,17 @@ Web application for automated electronic component sourcing. User uploads a sche
 
 ## Architecture
 
-13 Docker containers on a single network (`app-network`):
+12 Docker containers on a single network (`app-network`):
 
 - **frontend** (Next.js :3000) — Chat UI with file upload, WebSocket status, BOM rendering
 - **backend** (FastAPI :8000) — REST API, Supabase CRUD, MinIO files, Redis pub/sub → WebSocket
-- **agent** (Anthropic Agent SDK worker) — Picks tasks from Redis queue, orchestrates MCP tools via LiteLLM→GPT-5.4
-- **litellm-proxy** (LiteLLM :4000) — Translates Anthropic SDK format → OpenAI API
+- **agent** (OpenAI Agents SDK worker) — Picks tasks from Redis queue, orchestrator agent delegates to sub-agents (analysis, sourcing, export), makes interactive decisions via handoffs. Direct OpenAI API (GPT-5.4).
 - **redis** (Redis 7 :6379) — Task queue (`agent:tasks`) + pub/sub (`agent:status:{conv_id}`)
 - **minio** (MinIO :9000/:9001) — Object storage for uploads/temp/exports
 - **mcp-nexar** (:8001) — Nexar/Octopart component search (GraphQL, OAuth2)
-- **mcp-snapmagic** (:8002) — CAD model availability check (web search via LiteLLM)
+- **mcp-snapmagic** (:8002) — CAD model availability check (web search)
 - **mcp-documents** (:8003) — PDF rendering, image processing, base64 retrieval (MinIO)
-- **mcp-websearch** (:8004) — Web search fallback (via LiteLLM)
+- **mcp-websearch** (:8004) — Web search fallback (direct OpenAI API)
 - **mcp-export** (:8005) — CSV/KiCad/Altium library generation (MinIO)
 - **loki** (:3100) + **grafana** (:3001) — Observability
 
@@ -29,7 +28,7 @@ External: Supabase (PostgreSQL), OpenAI API (GPT-5.4), Nexar API
 
 All credentials in `.env` (gitignored). See `.env.example` for template.
 
-Key vars: `OPENAI_API_KEY`, `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `REDIS_URL`, `LITELLM_BASE_URL`, `MINIO_ENDPOINT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
+Key vars: `OPENAI_API_KEY`, `OPENAI_MODEL`, `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `REDIS_URL`, `MINIO_ENDPOINT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
 
 ## Commands
 
