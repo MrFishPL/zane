@@ -83,8 +83,9 @@ class AgentWorker:
         """Wrapper to ensure exceptions don't crash the event loop."""
         try:
             await self._process_task(task, raw_task)
-        except Exception:
-            log.error("worker.process_task_wrapper_error", exc_info=True)
+        except Exception as e:
+            import traceback
+            log.error("worker.process_task_wrapper_error", error=str(e), tb=traceback.format_exc())
 
     async def _process_task(self, task: dict, raw_task: str) -> None:
         """Process a single task via the Orchestrator."""
@@ -115,21 +116,33 @@ class AgentWorker:
                 # Pause: save state, move to paused list
                 state = OrchestratorState(**result.data["state"])
                 await self._state_mgr.pause(state)
+                # Publish only the decisions, not the full state (too large for pub/sub)
+                decision_msg = {
+                    "status": "decision_required",
+                    "task_id": task_id,
+                    "message": result.message,
+                    "decisions": [d.model_dump() for d in result.decisions] if result.decisions else [],
+                }
                 await self._publish(
-                    conversation_id, task_id, "decision_required",
-                    result.model_dump(),
+                    conversation_id, task_id, "decision_required", decision_msg,
                 )
                 # Move from processing to paused
                 await self._redis.lrem("agent:processing", 1, raw_task)
+                log.info("worker.task_paused", task_id=task_id, num_decisions=len(decision_msg["decisions"]))
                 return
 
             await self._publish(conversation_id, task_id, "result", result.model_dump())
+            log.info("worker.task_completed", task_id=task_id, status=result.status)
 
         except Exception as e:
-            log.error("worker.task_error", task_id=task_id, error=str(e)[:500])
-            await self._publish(
-                conversation_id, task_id, "error", {"error": str(e)[:500]},
-            )
+            import traceback
+            log.error("worker.task_error", task_id=task_id, error=str(e)[:500], tb=traceback.format_exc())
+            try:
+                await self._publish(
+                    conversation_id, task_id, "error", {"error": str(e)[:500]},
+                )
+            except Exception:
+                log.error("worker.publish_error_failed", task_id=task_id)
         finally:
             await self._redis.lrem("agent:processing", 1, raw_task)
 
