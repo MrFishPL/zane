@@ -153,6 +153,13 @@ class Orchestrator:
         for att in attachments:
             path = att.get("path", "")
             att_type = att.get("type", "")
+            # Infer type from file extension if not provided
+            if not att_type:
+                lower_path = path.lower()
+                if lower_path.endswith(".pdf"):
+                    att_type = "application/pdf"
+                elif any(lower_path.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+                    att_type = "image"
 
             if "pdf" in att_type.lower():
                 try:
