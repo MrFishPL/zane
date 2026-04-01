@@ -437,8 +437,11 @@ class AgentRunner:
         content_parts: list[dict[str, Any]] = []
 
         if attachments:
+            # Collect image paths so agent knows how to reference them for crop_zoom_image
+            image_paths = []
             for att in attachments:
                 if att.get("type") == "image" and att.get("base64"):
+                    img_path = att.get("path", "")
                     content_parts.append(
                         {
                             "type": "image_url",
@@ -447,14 +450,22 @@ class AgentRunner:
                             },
                         }
                     )
+                    if img_path:
+                        image_paths.append(img_path)
                 elif att.get("type") == "text" and att.get("content"):
-                    # PDF text extraction — include as text context
                     content_parts.append(
                         {
                             "type": "text",
                             "text": f"[Extracted PDF text with component values]\n{att['content']}",
                         }
                     )
+            # Tell the agent the actual MinIO paths for zoom
+            if image_paths:
+                paths_text = "\n".join(f"  Image {i+1}: {p}" for i, p in enumerate(image_paths))
+                content_parts.append({
+                    "type": "text",
+                    "text": f"[Schematic image paths for crop_zoom_image tool]\n{paths_text}",
+                })
 
         content_parts.append({"type": "text", "text": user_message})
 
