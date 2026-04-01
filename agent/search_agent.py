@@ -182,11 +182,9 @@ class SearchAgent:
         for iteration in range(self._max_iterations):
             log.info("search_iteration", ref=spec.ref, iteration=iteration)
 
-            response = await self._llm.chat.completions.create(
-                model="gpt-5.4",
-                messages=messages,
+            response = await self._llm.chat(
+                messages,
                 tools=SEARCH_TOOLS,
-                tool_choice="auto",
             )
 
             choice = response.choices[0]

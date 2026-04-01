@@ -97,6 +97,10 @@ class AgentWorker:
             # Import here to allow orchestrator to not exist yet at import time
             from orchestrator import Orchestrator
 
+            log.info("worker.processing_task", task_id=task_id,
+                     attachments=task.get("attachments", []),
+                     message_preview=task.get("message", "")[:200])
+
             orch = Orchestrator(self._llm, self._router, self._state_mgr, self._publish)
             result = await orch.run(
                 task_id=task_id,

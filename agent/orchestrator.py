@@ -152,6 +152,9 @@ class Orchestrator:
 
         for att in attachments:
             path = att.get("path", "")
+            # mcp-documents expects minio:// URIs — prefix if needed
+            if path and not path.startswith("minio://"):
+                path = f"minio://uploads/{path}" if not path.startswith("uploads/") else f"minio://{path}"
             att_type = att.get("type", "")
             # Infer type from file extension if not provided
             if not att_type:
@@ -225,13 +228,23 @@ class Orchestrator:
         user_text = "\n\n".join(parts) if parts else "Analyze the attached schematic."
 
         # Convert raw base64 strings to data URIs for the vision API
-        image_urls = [
-            f"data:image/png;base64,{b64}" for b64 in images
-        ]
+        image_urls = []
+        for b64 in images:
+            # Handle already-prefixed data URIs
+            if b64.startswith("data:"):
+                image_urls.append(b64)
+            else:
+                image_urls.append(f"data:image/jpeg;base64,{b64}")
 
-        return await self._llm.analyze_schematic(
+        log.info("phase2.inputs", num_images=len(image_urls), num_texts=len(texts),
+                 user_text_len=len(user_text), img_prefix=image_urls[0][:50] if image_urls else "none")
+
+        result = await self._llm.analyze_schematic(
             ORCHESTRATOR_SYSTEM_PROMPT, user_text, image_urls,
         )
+        log.info("phase2.result", num_components=len(result.get("components", [])),
+                 keys=list(result.keys()), raw_preview=str(result)[:500])
+        return result
 
     async def _phase3_search_components(
         self,
