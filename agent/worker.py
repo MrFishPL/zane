@@ -346,7 +346,7 @@ class AgentWorker:
                         log.info("pdf_text_extracted", pages=len(pdf_text_parts),
                                  chars=len(combined_text))
 
-                    # Include max 3 schematic images (highest value pages)
+                    # Include max 3 schematic images, resized to save context
                     for page_path, page_num in schematic_pages[:3]:
                         try:
                             raw_b64 = await router.call_tool(
@@ -357,6 +357,8 @@ class AgentWorker:
                                 b64 = parsed_b64.get("base64", "")
                             else:
                                 b64 = raw_b64
+                            # Resize to max 1600px wide to stay within context limits
+                            b64 = self._resize_base64(b64, max_width=1600)
                             enriched.append({"type": "image", "path": page_path, "base64": b64})
                         except Exception:
                             log.error("page_base64_failed", page=page_path, exc_info=True)
@@ -399,6 +401,36 @@ class AgentWorker:
                 enriched.append(att)
 
         return enriched
+
+    # ------------------------------------------------------------------
+    # Image resizing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resize_base64(b64: str, max_width: int = 1600) -> str:
+        """Resize a base64 PNG/JPEG to max_width, return new base64."""
+        if not b64:
+            return b64
+        try:
+            import base64
+            import io
+            from PIL import Image
+
+            img_bytes = base64.b64decode(b64)
+            img = Image.open(io.BytesIO(img_bytes))
+
+            if img.width <= max_width:
+                return b64  # already small enough
+
+            ratio = max_width / img.width
+            new_h = int(img.height * ratio)
+            img = img.resize((max_width, new_h), Image.LANCZOS)
+
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+        except Exception:
+            return b64  # return original on any error
 
     # ------------------------------------------------------------------
     # Redis pub/sub
