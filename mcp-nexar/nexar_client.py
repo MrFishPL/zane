@@ -1,5 +1,6 @@
 """GraphQL client for the Nexar (Octopart) API."""
 
+import os
 import time
 from typing import Any
 
@@ -13,54 +14,104 @@ log = structlog.get_logger()
 GRAPHQL_URL = "https://api.nexar.com/graphql"
 
 SEARCH_QUERY = """
-query SearchParts($query: String!, $limit: Int!) {
-  supSearch(q: $query, limit: $limit) {
+query SearchParts($query: String!, $limit: Int!, $country: String!, $currency: String!) {
+  supSearch(q: $query, limit: $limit, country: $country, currency: $currency) {
     hits
     results {
       part {
         mpn
         manufacturer { name }
         shortDescription
+        totalAvail
+        category { name }
+        octopartUrl
         medianPrice1000 { price currency }
-        sellers {
+        sellers(authorizedOnly: true) {
           company { name }
           offers {
             inventoryLevel
+            moq
+            sku
             prices { quantity price currency }
             clickUrl
           }
         }
-        v3uid
-        counts
       }
     }
   }
 }
 """
 
-# Specs we always want to surface when available
-KEY_SPECS = {
-    "Resistance",
-    "Capacitance",
-    "Inductance",
-    "Voltage Rating",
-    "Voltage - Rated",
-    "Power (Watts)",
-    "Tolerance",
-    "Package / Case",
-    "Temperature Coefficient",
-    "Operating Temperature",
-    "Mounting Type",
-    "Size / Dimension",
-    "Lifecycle Status",
+SEARCH_MPN_QUERY = """
+query SearchMPN($query: String!, $limit: Int!, $country: String!, $currency: String!) {
+  supSearchMpn(q: $query, limit: $limit, country: $country, currency: $currency) {
+    hits
+    results {
+      part {
+        mpn
+        manufacturer { name }
+        shortDescription
+        totalAvail
+        category { name }
+        octopartUrl
+        medianPrice1000 { price currency }
+        sellers(authorizedOnly: true) {
+          company { name }
+          offers {
+            inventoryLevel
+            moq
+            sku
+            prices { quantity price currency }
+            clickUrl
+          }
+        }
+      }
+    }
+  }
 }
+"""
+
+MULTI_MATCH_QUERY = """
+query MultiMatch($queries: [SupPartMatchQuery!]!, $country: String!, $currency: String!) {
+  supMultiMatch(queries: $queries, country: $country, currency: $currency) {
+    hits
+    parts {
+      mpn
+      manufacturer { name }
+      shortDescription
+      totalAvail
+      category { name }
+      octopartUrl
+      medianPrice1000 { price currency }
+      sellers(authorizedOnly: true) {
+        company { name }
+        offers {
+          inventoryLevel
+          moq
+          sku
+          prices { quantity price currency }
+          clickUrl
+        }
+      }
+    }
+  }
+}
+"""
 
 
 class NexarClient:
     """High-level client for Nexar component search."""
 
-    def __init__(self, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        country: str | None = None,
+        currency: str | None = None,
+    ) -> None:
         self._auth = NexarAuth(client_id, client_secret)
+        self._country = country or os.environ.get("NEXAR_COUNTRY", "US")
+        self._currency = currency or os.environ.get("NEXAR_CURRENCY", "USD")
 
     async def _execute_query(
         self, query: str, variables: dict[str, Any]
@@ -95,25 +146,15 @@ class NexarClient:
             log.error("nexar_client.graphql_errors", errors=data["errors"])
             raise RuntimeError(f"Nexar GraphQL errors: {data['errors']}")
         if "errors" in data:
-            # Partial errors (e.g. unauthorized fields) — log but continue with available data
+            # Partial errors (e.g. unauthorized fields) -- log but continue with available data
             log.warning("nexar_client.partial_errors", count=len(data["errors"]))
 
         return data["data"]
 
     def _compress_part(self, part: dict[str, Any]) -> dict[str, Any]:
-        """Compress a part result: key specs only, top 5 sellers, max 3 price breaks."""
+        """Compress a part result: top 5 sellers, max 3 price breaks."""
         if not part:
             return {}
-
-        # Filter specs to key ones
-        specs = []
-        if part.get("specs"):
-            for spec in part["specs"]:
-                attr_name = spec.get("attribute", {}).get("name", "")
-                if attr_name in KEY_SPECS:
-                    specs.append(
-                        {"name": attr_name, "value": spec.get("displayValue", "")}
-                    )
 
         # Compress sellers: top 5, max 3 price breaks each
         sellers = []
@@ -123,6 +164,8 @@ class NexarClient:
                 compressed_offers.append(
                     {
                         "stock": offer.get("inventoryLevel"),
+                        "moq": offer.get("moq"),
+                        "sku": offer.get("sku"),
                         "prices": (offer.get("prices") or [])[:3],
                         "url": offer.get("clickUrl"),
                     }
@@ -134,40 +177,23 @@ class NexarClient:
                 }
             )
 
-        # Determine lifecycle from specs
-        lifecycle = "unknown"
-        if part.get("specs"):
-            for spec in part["specs"]:
-                if spec.get("attribute", {}).get("name", "").lower() in (
-                    "lifecycle status",
-                    "lifecycle",
-                ):
-                    raw = (spec.get("displayValue") or "").lower()
-                    if "active" in raw:
-                        lifecycle = "active"
-                    elif "nrnd" in raw or "not recommended" in raw:
-                        lifecycle = "nrnd"
-                    elif "obsolete" in raw or "discontinued" in raw:
-                        lifecycle = "obsolete"
-                    else:
-                        lifecycle = raw or "unknown"
-                    break
-
         result: dict[str, Any] = {
             "mpn": part.get("mpn"),
             "manufacturer": (part.get("manufacturer") or {}).get("name"),
             "description": part.get("shortDescription"),
-            "specs": specs,
-            "datasheet_url": (part.get("bestDatasheet") or {}).get("url"),
+            "total_avail": part.get("totalAvail"),
+            "category": (part.get("category") or {}).get("name"),
+            "octopart_url": part.get("octopartUrl"),
             "median_price_1000": part.get("medianPrice1000"),
             "sellers": sellers,
-            "lifecycle": lifecycle,
         }
         return result
 
-    def _compress_results(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Compress supSearch results into a concise format."""
-        sup_search = data.get("supSearch", {})
+    def _compress_results(
+        self, data: dict[str, Any], root_key: str = "supSearch"
+    ) -> dict[str, Any]:
+        """Compress search results into a concise format."""
+        sup_search = data.get(root_key, {})
         results = sup_search.get("results") or []
 
         parts = []
@@ -188,7 +214,13 @@ class NexarClient:
 
         try:
             data = await self._execute_query(
-                SEARCH_QUERY, {"query": query, "limit": 5}
+                SEARCH_QUERY,
+                {
+                    "query": query,
+                    "limit": 5,
+                    "country": self._country,
+                    "currency": self._currency,
+                },
             )
             result = self._compress_results(data)
             duration_ms = round((time.monotonic() - start) * 1000)
@@ -211,9 +243,15 @@ class NexarClient:
 
         try:
             data = await self._execute_query(
-                SEARCH_QUERY, {"query": mpn, "limit": 5}
+                SEARCH_MPN_QUERY,
+                {
+                    "query": mpn,
+                    "limit": 3,
+                    "country": self._country,
+                    "currency": self._currency,
+                },
             )
-            result = self._compress_results(data)
+            result = self._compress_results(data, root_key="supSearchMpn")
             duration_ms = round((time.monotonic() - start) * 1000)
             log.info(
                 "nexar_client.search_mpn.ok",
@@ -228,86 +266,40 @@ class NexarClient:
             raise
 
     async def multi_match(self, mpns: list[str]) -> dict[str, Any]:
-        """Batch lookup of multiple MPNs."""
+        """Batch lookup of multiple MPNs using native supMultiMatch."""
         start = time.monotonic()
         log.info("nexar_client.multi_match", count=len(mpns))
 
-        results: dict[str, Any] = {}
-        errors: dict[str, str] = {}
-
-        for mpn in mpns:
-            try:
-                result = await self.search_mpn(mpn)
-                results[mpn] = result
-            except Exception as exc:
-                log.warning("nexar_client.multi_match.mpn_error", mpn=mpn[:200])
-                errors[mpn] = str(exc)
-
-        duration_ms = round((time.monotonic() - start) * 1000)
-        log.info(
-            "nexar_client.multi_match.ok",
-            total=len(mpns),
-            success=len(results),
-            errors=len(errors),
-            duration_ms=duration_ms,
-        )
-        return {"results": results, "errors": errors}
-
-    async def check_lifecycle(self, mpn: str) -> dict[str, Any]:
-        """Check lifecycle status of a component."""
-        start = time.monotonic()
-        log.info("nexar_client.check_lifecycle", mpn=mpn[:200])
-
         try:
+            queries = [{"mpn": mpn, "limit": 3} for mpn in mpns]
             data = await self._execute_query(
-                SEARCH_QUERY, {"query": mpn, "limit": 1}
+                MULTI_MATCH_QUERY,
+                {
+                    "queries": queries,
+                    "country": self._country,
+                    "currency": self._currency,
+                },
             )
-            compressed = self._compress_results(data)
 
-            if compressed["results"]:
-                part = compressed["results"][0]
-                result = {
-                    "mpn": part["mpn"],
-                    "manufacturer": part["manufacturer"],
-                    "lifecycle": part["lifecycle"],
-                }
-            else:
-                result = {
-                    "mpn": mpn,
-                    "manufacturer": None,
-                    "lifecycle": "unknown",
+            multi_results = data.get("supMultiMatch") or []
+            results: dict[str, Any] = {}
+            for mpn, match in zip(mpns, multi_results):
+                parts_raw = match.get("parts") or []
+                parts = [self._compress_part(p) for p in parts_raw if p]
+                results[mpn] = {
+                    "hits": match.get("hits", len(parts)),
+                    "results": parts,
                 }
 
             duration_ms = round((time.monotonic() - start) * 1000)
             log.info(
-                "nexar_client.check_lifecycle.ok",
-                lifecycle=result["lifecycle"],
+                "nexar_client.multi_match.ok",
+                total=len(mpns),
+                success=len(results),
                 duration_ms=duration_ms,
             )
-            return result
-        except Exception:
+            return {"results": results, "errors": {}}
+        except Exception as exc:
             duration_ms = round((time.monotonic() - start) * 1000)
-            log.error("nexar_client.check_lifecycle.error", duration_ms=duration_ms)
+            log.error("nexar_client.multi_match.error", duration_ms=duration_ms)
             raise
-
-    async def get_quota_status(self) -> dict[str, Any]:
-        """Return placeholder quota status information.
-
-        The Nexar API does not expose a dedicated quota endpoint.
-        This returns a static placeholder so callers can check
-        that the auth flow works and the server is responsive.
-        """
-        log.info("nexar_client.get_quota_status")
-
-        # Verify credentials work by ensuring we can get a token
-        try:
-            await self._auth.get_token()
-            auth_ok = True
-        except Exception:
-            auth_ok = False
-
-        return {
-            "status": "ok" if auth_ok else "auth_error",
-            "auth_valid": auth_ok,
-            "note": "Nexar does not expose a quota endpoint. Check your dashboard at nexar.com for usage details.",
-        }

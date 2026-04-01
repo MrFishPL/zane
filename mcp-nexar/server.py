@@ -53,7 +53,7 @@ def _log_tool_call(
 
 @mcp.tool()
 async def search_parts(query: str) -> dict:
-    """Search for electronic components by description (e.g. '3 ohm resistor 0603'). Returns top 5 results with specs, pricing, stock, and distributor links."""
+    """Search for electronic components by description (e.g. '3 ohm resistor 0603'). Returns top 5 results with pricing, stock, and distributor links."""
     start = time.monotonic()
     try:
         result = await client.search_parts(query)
@@ -68,7 +68,7 @@ async def search_parts(query: str) -> dict:
 
 @mcp.tool()
 async def search_mpn(mpn: str) -> dict:
-    """Search for a specific component by Manufacturer Part Number. Returns detailed pricing, stock, and specs."""
+    """Search for a specific component by Manufacturer Part Number. Returns detailed pricing and stock."""
     start = time.monotonic()
     try:
         result = await client.search_mpn(mpn)
@@ -95,36 +95,6 @@ async def multi_match(mpns: list[str]) -> dict:
         duration_ms = round((time.monotonic() - start) * 1000)
         _log_tool_call("multi_match", f"mpns=[{mpns_str}]", duration_ms, False, str(exc))
         return {"error": str(exc), "results": {}, "errors": {}}
-
-
-@mcp.tool()
-async def check_lifecycle(mpn: str) -> dict:
-    """Check lifecycle status of a component (active/nrnd/obsolete/unknown)."""
-    start = time.monotonic()
-    try:
-        result = await client.check_lifecycle(mpn)
-        duration_ms = round((time.monotonic() - start) * 1000)
-        _log_tool_call("check_lifecycle", f"mpn={mpn}", duration_ms, True)
-        return result
-    except Exception as exc:
-        duration_ms = round((time.monotonic() - start) * 1000)
-        _log_tool_call("check_lifecycle", f"mpn={mpn}", duration_ms, False, str(exc))
-        return {"error": str(exc), "mpn": mpn, "lifecycle": "unknown"}
-
-
-@mcp.tool()
-async def get_quota_status() -> dict:
-    """Get remaining Nexar API quota for this month."""
-    start = time.monotonic()
-    try:
-        result = await client.get_quota_status()
-        duration_ms = round((time.monotonic() - start) * 1000)
-        _log_tool_call("get_quota_status", "", duration_ms, True)
-        return result
-    except Exception as exc:
-        duration_ms = round((time.monotonic() - start) * 1000)
-        _log_tool_call("get_quota_status", "", duration_ms, False, str(exc))
-        return {"error": str(exc), "status": "error"}
 
 
 # Health endpoint
