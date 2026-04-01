@@ -43,9 +43,16 @@ export default function ChatWindow({
   const canSend =
     inputText.trim().length > 0 && !isUploading && !isAgentRunning;
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom only if user is already near the bottom
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, agentStatus.current_status]);
 
   // Auto-resize textarea
@@ -107,7 +114,7 @@ export default function ChatWindow({
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         {!hasMessages ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center h-full px-4 text-center">
