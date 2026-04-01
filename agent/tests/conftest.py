@@ -20,6 +20,7 @@ class FakeRedis:
 
     def __init__(self) -> None:
         self.lists: dict[str, list[str]] = {}
+        self.hashes: dict[str, dict[str, str]] = {}
         self.published: list[tuple[str, str]] = []  # (channel, payload)
 
     async def ping(self) -> bool:
@@ -61,10 +62,17 @@ class FakeRedis:
 
     async def lrem(self, key: str, count: int, value: str) -> int:
         lst = self.lists.get(key, [])
+        # Support both str and bytes matching
         removed = 0
-        while value in lst and (count == 0 or removed < abs(count)):
-            lst.remove(value)
-            removed += 1
+        to_remove = []
+        for i, v in enumerate(lst):
+            if v == value or (isinstance(v, bytes) and v == value.encode()) or (isinstance(value, bytes) and v == value.decode()):
+                to_remove.append(i)
+                removed += 1
+                if count != 0 and removed >= abs(count):
+                    break
+        for i in reversed(to_remove):
+            lst.pop(i)
         return removed
 
     async def publish(self, channel: str, message: str) -> int:
@@ -76,6 +84,49 @@ class FakeRedis:
         for v in reversed(values):
             lst.insert(0, v)
         return len(lst)
+
+    async def lrange(self, key: str, start: int, stop: int) -> list:
+        lst = self.lists.get(key, [])
+        if stop == -1:
+            return lst[start:]
+        return lst[start:stop + 1]
+
+    async def hset(self, key: str, field: str | None = None, value: str | None = None, mapping: dict | None = None) -> int:
+        h = self.hashes.setdefault(key, {})
+        count = 0
+        if mapping:
+            for k, v in mapping.items():
+                h[k] = v
+                count += 1
+        if field is not None and value is not None:
+            h[field] = value
+            count += 1
+        return count
+
+    async def hget(self, key: str, field: str) -> str | None:
+        h = self.hashes.get(key, {})
+        return h.get(field)
+
+    async def hgetall(self, key: str) -> dict:
+        return dict(self.hashes.get(key, {}))
+
+    async def delete(self, *keys: str) -> int:
+        count = 0
+        for key in keys:
+            if key in self.hashes:
+                del self.hashes[key]
+                count += 1
+            if key in self.lists:
+                del self.lists[key]
+                count += 1
+        return count
+
+    async def brpop(self, key: str, timeout: int = 0) -> tuple | None:
+        lst = self.lists.get(key, [])
+        if not lst:
+            return None
+        item = lst.pop()
+        return (key, item)
 
 
 @pytest.fixture
