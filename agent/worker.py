@@ -285,13 +285,15 @@ class AgentWorker:
                     att_type = "image"
 
             if att_type == "pdf":
-                # Render PDF pages to images
+                # Two-phase PDF processing:
+                # 1. Render all pages, extract text from ALL, build page index
+                # 2. Include only top schematic images (max 3) + full text + page index
+                # Agent can request more pages via get_image_base64 tool
                 try:
                     minio_path = path if path.startswith("minio://") else f"minio://{path}"
                     raw_pages = await router.call_tool("render_pdf_pages", {"pdf_path": minio_path})
                     if isinstance(raw_pages, str):
                         raw_pages = json.loads(raw_pages)
-                    # Handle both list and dict {"pages": [...]} formats
                     if isinstance(raw_pages, dict) and "pages" in raw_pages:
                         page_list = raw_pages["pages"]
                     elif isinstance(raw_pages, list):
@@ -299,22 +301,53 @@ class AgentWorker:
                     else:
                         log.warning("unexpected_render_result", result=type(raw_pages).__name__)
                         page_list = []
-                    # Include schematic/diagram pages as images (max 4), extract text from rest
-                    text_page_numbers = []
+
+                    # Categorize pages
                     schematic_pages = []
+                    all_page_index = []
                     for page in page_list:
                         page_path = page if isinstance(page, str) else page.get("minio_path", "")
-                        classification = page.get("classification", "") if isinstance(page, dict) else ""
+                        classification = page.get("classification", "") if isinstance(page, dict) else "unknown"
                         page_num = page.get("number", 0) if isinstance(page, dict) else 0
                         if not page_path:
                             continue
-                        if classification == "text":
-                            text_page_numbers.append(page_num)
-                        else:
+                        all_page_index.append({
+                            "page": page_num, "type": classification, "path": page_path
+                        })
+                        if classification != "text":
                             schematic_pages.append((page_path, page_num))
 
-                    # Limit to max 4 schematic images to stay within context window
-                    for page_path, page_num in schematic_pages[:4]:
+                    # Extract text from ALL pages (cheap, gives component values)
+                    pdf_text_parts = []
+                    for page_info in all_page_index:
+                        pn = page_info["page"]
+                        try:
+                            text_result = await router.call_tool(
+                                "extract_text", {"pdf_path": minio_path, "page_number": pn}
+                            )
+                            if isinstance(text_result, str):
+                                try:
+                                    parsed_text = json.loads(text_result)
+                                    text_content = parsed_text.get("text", text_result)
+                                except (json.JSONDecodeError, AttributeError):
+                                    text_content = text_result
+                                if text_content and len(text_content.strip()) > 30:
+                                    preview = text_content.strip()[:200]
+                                    pdf_text_parts.append(f"[Page {pn}] {text_content.strip()}")
+                                    all_page_index[pn - 1]["text_preview"] = preview if pn <= len(all_page_index) else ""
+                        except Exception:
+                            pass
+
+                    if pdf_text_parts:
+                        combined_text = "\n\n".join(pdf_text_parts)
+                        if len(combined_text) > 12000:
+                            combined_text = combined_text[:12000] + "\n[...truncated]"
+                        enriched.append({"type": "text", "content": combined_text})
+                        log.info("pdf_text_extracted", pages=len(pdf_text_parts),
+                                 chars=len(combined_text))
+
+                    # Include max 3 schematic images (highest value pages)
+                    for page_path, page_num in schematic_pages[:3]:
                         try:
                             raw_b64 = await router.call_tool(
                                 "get_image_base64", {"image_path": page_path}
@@ -327,32 +360,21 @@ class AgentWorker:
                             enriched.append({"type": "image", "path": page_path, "base64": b64})
                         except Exception:
                             log.error("page_base64_failed", page=page_path, exc_info=True)
-                    # Extract text from text pages (component values, calculations)
-                    if text_page_numbers:
-                        pdf_text_parts = []
-                        for pn in text_page_numbers[:10]:  # limit to 10 text pages
-                            try:
-                                text_result = await router.call_tool(
-                                    "extract_text", {"pdf_path": minio_path, "page_number": pn}
-                                )
-                                if isinstance(text_result, str):
-                                    try:
-                                        parsed_text = json.loads(text_result)
-                                        text_content = parsed_text.get("text", text_result)
-                                    except (json.JSONDecodeError, AttributeError):
-                                        text_content = text_result
-                                    if text_content and len(text_content.strip()) > 50:
-                                        pdf_text_parts.append(f"[Page {pn}] {text_content.strip()}")
-                            except Exception:
-                                log.warning("text_extract_failed", page=pn, exc_info=True)
-                        if pdf_text_parts:
-                            combined_text = "\n\n".join(pdf_text_parts)
-                            # Truncate to avoid context window overflow
-                            if len(combined_text) > 8000:
-                                combined_text = combined_text[:8000] + "\n[...truncated]"
-                            enriched.append({"type": "text", "content": combined_text})
-                            log.info("pdf_text_extracted", pages=len(pdf_text_parts),
-                                     chars=len(combined_text))
+
+                    # Build page index so agent can request more via get_image_base64
+                    if len(schematic_pages) > 3:
+                        remaining = [f"  Page {pn}: {pp} (use get_image_base64 to load)"
+                                     for pp, pn in schematic_pages[3:]]
+                        enriched.append({
+                            "type": "text",
+                            "content": f"[Additional schematic pages available — not loaded to save context]\n"
+                                       + "\n".join(remaining)
+                        })
+
+                    log.info("pdf_processed", total_pages=len(page_list),
+                             schematics=len(schematic_pages),
+                             images_included=min(3, len(schematic_pages)),
+                             text_pages=len(pdf_text_parts))
 
                 except Exception:
                     log.error("pdf_render_failed", path=path, exc_info=True)
