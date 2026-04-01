@@ -90,8 +90,8 @@ class LLMClient:
         for attempt, timeout_secs in enumerate(timeouts):
             call_kwargs = {**base_kwargs, "timeout": timeout_secs}
 
-            # Try with reasoning_effort if configured
-            if self.reasoning_effort and "reasoning_effort" not in call_kwargs:
+            # Try with reasoning_effort if configured (not compatible with tools on gpt-5.4)
+            if self.reasoning_effort and "reasoning_effort" not in call_kwargs and "tools" not in call_kwargs:
                 call_kwargs["reasoning_effort"] = self.reasoning_effort
 
             try:
@@ -101,6 +101,7 @@ class LLMClient:
                 if "reasoning_effort" in call_kwargs and (
                     "unexpected keyword" in str(exc).lower()
                     or "unrecognized" in str(exc).lower()
+                    or "reasoning_effort" in str(exc).lower()
                     or isinstance(exc, TypeError)
                 ):
                     logger.warning(
