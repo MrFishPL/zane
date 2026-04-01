@@ -172,6 +172,22 @@ export default function Home() {
         }));
       }
 
+      // Agent paused waiting for user decision
+      if (data.type === "decision_required") {
+        setAgentStatus({
+          status: "idle",
+          current_status: "Waiting for your decision...",
+          error: null,
+        });
+
+        // Re-fetch messages to get the decision_required assistant message
+        if (activeId) {
+          getConversation(activeId)
+            .then((detail) => setMessages(detail.messages || []))
+            .catch(() => {});
+        }
+      }
+
       // Agent completed with result
       if (data.type === "result" || data.type === "message") {
         setAgentStatus(IDLE_STATUS);
@@ -366,6 +382,7 @@ export default function Home() {
         onRemoveUpload={removeUpload}
         onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
         conversationTitle={activeConv?.title ?? null}
+        conversationId={activeId ?? undefined}
       />
     </div>
   );

@@ -154,3 +154,24 @@ export async function uploadFile(
 export function getFileUrl(path: string): string {
   return `${API_BASE}/api/files/${path}`;
 }
+
+// ---------------------------------------------------------------------------
+// Decisions
+// ---------------------------------------------------------------------------
+
+export async function sendDecision(
+  conversationId: string,
+  taskId: string,
+  decisionId: string,
+  choice: string,
+): Promise<void> {
+  return request<void>(`/api/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({
+      content: `Decision: ${choice}`,
+      decision_id: decisionId,
+      task_id: taskId,
+      choice,
+    }),
+  });
+}
