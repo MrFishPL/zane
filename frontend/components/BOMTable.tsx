@@ -112,19 +112,23 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
 
         {/* MPN */}
         <td className="px-3 py-2.5 text-sm">
-          <a
-            href={comp.distributor_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent hover:text-accent-hover underline decoration-accent/30 hover:decoration-accent transition-colors font-mono"
-          >
-            {comp.mpn}
-          </a>
+          {comp.mpn && comp.distributor_url ? (
+            <a
+              href={comp.distributor_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:text-accent-hover underline decoration-accent/30 hover:decoration-accent transition-colors font-mono"
+            >
+              {comp.mpn}
+            </a>
+          ) : (
+            <span className="font-mono text-text-muted">{comp.mpn || "—"}</span>
+          )}
         </td>
 
         {/* Manufacturer */}
         <td className="px-3 py-2.5 text-sm text-text-secondary whitespace-nowrap">
-          {comp.manufacturer}
+          {comp.manufacturer || "—"}
         </td>
 
         {/* Description */}

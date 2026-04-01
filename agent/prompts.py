@@ -52,6 +52,18 @@ ordering the WRONG component (e.g. a non-standard value resistor that doesn't ex
 - If a component value or reference designator is hard to read, use the `crop_zoom_image` \
 tool to zoom into that region. Provide percentage coordinates (0-100) for the crop area.
 - Always identify ALL components visible on the schematic before searching.
+- NEVER say a schematic is "not readable" if you can see component symbols, values, \
+or reference designators. Academic papers, simulation screenshots, and block diagrams \
+often contain usable circuit information — extract what you can and work with it.
+- If exact values are unclear, use standard values for the circuit type (e.g. common \
+audio mixer resistor values) and note your assumptions.
+
+## CRITICAL: Every component must have an MPN
+- NEVER return a component with an empty MPN field.
+- If you cannot find a verified MPN from Nexar, use web search to find one.
+- If no exact match exists, find the closest available part and note the substitution.
+- For generic components (potentiometers, jacks), search Nexar with the full spec \
+(e.g. "panel mount D-shaft logarithmic 1M potentiometer dust sealed") to find a real MPN.
 
 ## SnapMagic CAD Model Edge Case (CRITICAL)
 After selecting the best component for each position, check SnapMagic availability. \

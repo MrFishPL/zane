@@ -92,14 +92,20 @@ export default function Home() {
       getConversation(id)
         .then((detail) => {
           setMessages(detail.messages || []);
-          // Update agent status from the conversation
-          const conv = conversations.find((c) => c.id === id);
-          if (conv) {
-            setAgentStatus({
-              status: conv.agent_status,
-              current_status: null,
-              error: null,
-            });
+          // Check if there are assistant messages — if so, agent is done
+          const hasAssistantMsg = (detail.messages || []).some(
+            (m: Message) => m.role === "assistant"
+          );
+          if (hasAssistantMsg) {
+            setAgentStatus(IDLE_STATUS);
+          } else {
+            // Check conversation status from the list
+            const conv = conversations.find((c) => c.id === id);
+            if (conv?.agent_status === "running") {
+              setAgentStatus({ status: "running", current_status: null, error: null });
+            } else {
+              setAgentStatus(IDLE_STATUS);
+            }
           }
         })
         .catch((err: unknown) => {
