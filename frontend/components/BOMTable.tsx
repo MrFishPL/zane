@@ -112,9 +112,9 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
 
         {/* MPN */}
         <td className="px-3 py-2.5 text-sm">
-          {comp.mpn && comp.distributor_url ? (
+          {comp.mpn ? (
             <a
-              href={comp.distributor_url}
+              href={comp.distributor_url || `https://octopart.com/search?q=${encodeURIComponent(comp.mpn)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:text-accent-hover underline decoration-accent/30 hover:decoration-accent transition-colors font-mono"
@@ -122,7 +122,7 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
               {comp.mpn}
             </a>
           ) : (
-            <span className="font-mono text-text-muted">{comp.mpn || "—"}</span>
+            <span className="font-mono text-text-muted">—</span>
           )}
         </td>
 
