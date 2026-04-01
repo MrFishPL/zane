@@ -299,14 +299,17 @@ class AgentWorker:
                     else:
                         log.warning("unexpected_render_result", result=type(raw_pages).__name__)
                         page_list = []
-                    # Only process schematic pages (skip text-only pages)
+                    # Include schematic/diagram pages as images, extract text info from text pages
+                    text_page_numbers = []
                     for page in page_list:
                         page_path = page if isinstance(page, str) else page.get("minio_path", "")
                         classification = page.get("classification", "") if isinstance(page, dict) else ""
+                        page_num = page.get("number", 0) if isinstance(page, dict) else 0
                         if not page_path:
                             continue
-                        # Skip non-schematic pages to save context
-                        if classification and classification not in ("schematic", "diagram", "circuit"):
+                        # Track text pages but don't include as images
+                        if classification == "text":
+                            text_page_numbers.append(page_num)
                             continue
                         try:
                             raw_b64 = await router.call_tool(
@@ -320,6 +323,30 @@ class AgentWorker:
                             enriched.append({"type": "image", "path": page_path, "base64": b64})
                         except Exception:
                             log.error("page_base64_failed", page=page_path, exc_info=True)
+                    # Extract text from text pages (component values, calculations)
+                    if text_page_numbers:
+                        pdf_text_parts = []
+                        for pn in text_page_numbers[:10]:  # limit to 10 text pages
+                            try:
+                                text_result = await router.call_tool(
+                                    "extract_text", {"pdf_path": minio_path, "page_number": pn}
+                                )
+                                if isinstance(text_result, str):
+                                    try:
+                                        parsed_text = json.loads(text_result)
+                                        text_content = parsed_text.get("text", text_result)
+                                    except (json.JSONDecodeError, AttributeError):
+                                        text_content = text_result
+                                    if text_content and len(text_content.strip()) > 50:
+                                        pdf_text_parts.append(f"[Page {pn}] {text_content.strip()}")
+                            except Exception:
+                                log.warning("text_extract_failed", page=pn, exc_info=True)
+                        if pdf_text_parts:
+                            combined_text = "\n\n".join(pdf_text_parts)
+                            enriched.append({"type": "text", "content": combined_text})
+                            log.info("pdf_text_extracted", pages=len(pdf_text_parts),
+                                     chars=len(combined_text))
+
                 except Exception:
                     log.error("pdf_render_failed", path=path, exc_info=True)
 

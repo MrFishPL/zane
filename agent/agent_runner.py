@@ -447,6 +447,14 @@ class AgentRunner:
                             },
                         }
                     )
+                elif att.get("type") == "text" and att.get("content"):
+                    # PDF text extraction — include as text context
+                    content_parts.append(
+                        {
+                            "type": "text",
+                            "text": f"[Extracted PDF text with component values]\n{att['content']}",
+                        }
+                    )
 
         content_parts.append({"type": "text", "text": user_message})
 

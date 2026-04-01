@@ -24,6 +24,7 @@ _TOOL_SERVER_MAP: dict[str, str] = {
     "render_pdf_pages": "mcp-documents",
     "get_image_base64": "mcp-documents",
     "crop_zoom_image": "mcp-documents",
+    "extract_text": "mcp-documents",
     # mcp-nexar
     "search_parts": "mcp-nexar",
     "search_mpn": "mcp-nexar",
