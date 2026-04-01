@@ -42,16 +42,14 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
     if body.decision_id:
         if not body.task_id or not body.choice:
             raise HTTPException(400, "decision_id requires task_id and choice")
-        await task_manager.submit_decision(body.task_id, {
-            "decision_id": body.decision_id,
-            "choice": body.choice,
-        })
-        user_msg = supabase_client.create_message(
-            conversation_id,
-            role="user",
-            content=json.dumps({"decision_id": body.decision_id, "choice": body.choice}),
-        )
-        return JSONResponse({"message": user_msg, "type": "decision_response"})
+        # choice may be a JSON string of all decisions (batch mode)
+        try:
+            choices = json.loads(body.choice)
+        except (json.JSONDecodeError, TypeError):
+            choices = {body.decision_id: body.choice}
+        await task_manager.submit_decision(body.task_id, choices)
+        # Don't create a visible user message for decisions
+        return JSONResponse({"type": "decision_response", "status": "ok"})
 
     # Check for running task
     existing_task = supabase_client.get_agent_task(conversation_id)

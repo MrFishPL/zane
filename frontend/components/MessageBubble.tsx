@@ -256,60 +256,6 @@ interface Decision {
   chosen?: string;
 }
 
-function DecisionCard({
-  decision,
-  conversationId,
-  taskId,
-  onDecisionMade,
-}: {
-  decision: Decision;
-  conversationId: string;
-  taskId: string;
-  onDecisionMade?: () => void;
-}) {
-  const [selected, setSelected] = useState<string | undefined>(decision.chosen);
-  const [loading, setLoading] = useState(false);
-
-  const handleClick = async (key: string) => {
-    if (selected) return;
-    setLoading(true);
-    try {
-      await sendDecision(conversationId, taskId, decision.decision_id, key);
-      setSelected(key);
-      onDecisionMade?.();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 my-2 bg-amber-50 dark:bg-amber-950/20">
-      <p className="font-medium text-sm text-text-primary mb-1">
-        {decision.ref}: {decision.mpn}
-      </p>
-      <p className="text-sm text-text-secondary mb-3">{decision.question}</p>
-      <div className="flex gap-2 flex-wrap">
-        {decision.options.map((opt) => (
-          <button
-            key={opt.key}
-            onClick={() => handleClick(opt.key)}
-            disabled={!!selected || loading}
-            className={`px-3 py-1.5 rounded text-sm transition-colors ${
-              selected === opt.key
-                ? "bg-accent text-white"
-                : selected
-                  ? "bg-bg-tertiary text-text-muted cursor-not-allowed"
-                  : "bg-bg-primary border border-border hover:bg-accent/10 hover:border-accent/30"
-            }`}
-          >
-            {opt.key}: {opt.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function DecisionRequiredView({
   data,
   messageTxt,
@@ -323,76 +269,137 @@ function DecisionRequiredView({
     data?.decisions && Array.isArray(data.decisions)
       ? (data.decisions as Decision[])
       : [];
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const taskId = data?.task_id || "";
   const total = decisions.length;
+
+  const [choices, setChoices] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const d of decisions) {
+      if (d.chosen) initial[d.decision_id] = d.chosen;
+    }
+    return initial;
+  });
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const resolved = Object.keys(choices).length;
+  const allResolved = resolved === total;
   const current = decisions[currentIndex];
 
-  const handleDecisionMade = () => {
-    if (current) {
-      setResolved((prev) => new Set(prev).add(current.decision_id));
-    }
-    // Auto-advance to next unresolved after short delay
+  const handleChoice = (decisionId: string, key: string) => {
+    setChoices((prev) => ({ ...prev, [decisionId]: key }));
+    // Auto-advance after short delay
     setTimeout(() => {
       if (currentIndex < total - 1) {
         setCurrentIndex((i) => i + 1);
       }
-    }, 400);
+    }, 300);
+  };
+
+  const handleSubmitAll = async () => {
+    if (!conversationId || !allResolved) return;
+    setSubmitting(true);
+    try {
+      // Send all decisions as one batch
+      await sendDecision(conversationId, taskId, "__batch__", JSON.stringify(choices));
+      setSubmitted(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!total || !conversationId) return null;
 
+  if (submitted) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-text-primary leading-relaxed">{messageTxt}</p>
+        <div className="border border-green-700 rounded-lg p-3 bg-green-950/20">
+          <p className="text-sm text-green-400">All {total} decisions submitted. Generating BOM...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {messageTxt && (
-        <p className="text-sm text-text-primary leading-relaxed mb-3">
+        <p className="text-sm text-text-primary leading-relaxed mb-2">
           {messageTxt}
         </p>
       )}
 
       {/* Progress bar */}
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2">
         <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
           <div
             className="h-full bg-accent rounded-full transition-all duration-300"
-            style={{ width: `${(resolved.size / total) * 100}%` }}
+            style={{ width: `${(resolved / total) * 100}%` }}
           />
         </div>
         <span className="text-xs text-text-muted shrink-0">
-          {resolved.size}/{total}
+          {resolved}/{total}
         </span>
       </div>
 
       {/* Current decision card */}
       {current && (
-        <DecisionCard
-          key={current.decision_id}
-          decision={current}
-          conversationId={conversationId}
-          taskId={data.task_id || ""}
-          onDecisionMade={handleDecisionMade}
-        />
+        <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50 dark:bg-amber-950/20">
+          <p className="font-medium text-sm text-text-primary mb-1">
+            {current.ref ? `${current.ref}: ` : ""}{current.mpn}
+          </p>
+          <p className="text-sm text-text-secondary mb-3">{current.question}</p>
+          <div className="flex gap-2 flex-wrap">
+            {current.options.map((opt) => {
+              const isSelected = choices[current.decision_id] === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => handleChoice(current.decision_id, opt.key)}
+                  className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                    isSelected
+                      ? "bg-accent text-white"
+                      : "bg-bg-primary border border-border hover:bg-accent/10 hover:border-accent/30"
+                  }`}
+                >
+                  {opt.key}: {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      {/* Navigation */}
+      {/* Navigation + Submit */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
           disabled={currentIndex === 0}
-          className="px-3 py-1 rounded text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="px-3 py-1.5 rounded text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           Prev
         </button>
         <span className="text-xs text-text-muted">
           {currentIndex + 1} / {total}
         </span>
-        <button
-          onClick={() => setCurrentIndex((i) => Math.min(total - 1, i + 1))}
-          disabled={currentIndex === total - 1}
-          className="px-3 py-1 rounded text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          Next
-        </button>
+        {allResolved && currentIndex === total - 1 ? (
+          <button
+            onClick={handleSubmitAll}
+            disabled={submitting}
+            className="px-4 py-1.5 rounded text-xs bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"
+          >
+            {submitting ? "Submitting..." : "Confirm all"}
+          </button>
+        ) : (
+          <button
+            onClick={() => setCurrentIndex((i) => Math.min(total - 1, i + 1))}
+            disabled={currentIndex === total - 1}
+            className="px-3 py-1.5 rounded text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
+          </button>
+        )}
       </div>
     </div>
   );

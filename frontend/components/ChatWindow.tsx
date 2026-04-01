@@ -53,7 +53,7 @@ export default function ChatWindow({
     if (isNearBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, agentStatus.current_status]);
+  }, [messages.length]);
 
   // Auto-resize textarea
   useEffect(() => {
