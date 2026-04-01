@@ -39,6 +39,11 @@ ordering the WRONG component (e.g. a non-standard value resistor that doesn't ex
 ## Data Sources
 1. Primary: Nexar/Octopart API via search_parts / search_mpn (mpn_confidence: "verified")
 2. Fallback: Web search via search_distributor (mpn_confidence: "searched")
+
+## CRITICAL: URLs must come from search results
+- distributor_url MUST be the actual clickUrl from Nexar seller offers — NEVER fabricate URLs.
+- If no clickUrl is available, set distributor_url to null.
+- NEVER construct URLs like "https://octopart.com/..." manually — they will 404.
 3. CAD models: SnapMagic via check_cad_availability / check_cad_batch
 4. Never guess part numbers -- always search and verify.
 
