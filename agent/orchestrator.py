@@ -115,29 +115,8 @@ class Orchestrator:
             components, priority, production_volume, context,
         )
 
-        # Phase 4: Check CAD
-        found_mpns = [r.mpn for r in search_results if r.is_found and r.mpn]
+        # Phase 4 & 5: Skipped — CAD check and interactive decisions disabled for now
         cad_statuses: list[CADStatus] = []
-        if found_mpns:
-            await self._publish(conversation_id, task_id, "status", "Checking CAD model availability...")
-            cad_statuses = await self._phase4_check_cad(found_mpns)
-
-        # Phase 5: User decisions (if needed)
-        decisions = self._build_decisions(search_results, cad_statuses)
-        if decisions:
-            state = OrchestratorState(
-                task_id=task_id, conversation_id=conversation_id, user_id=user_id,
-                phase="awaiting_decision", message=message,
-                production_volume=production_volume, priority=priority, context=context,
-                components=components, search_results=search_results,
-                cad_statuses=cad_statuses, decisions=decisions,
-            )
-            return AgentResult(
-                status="decision_required", task_id=task_id,
-                message=_msg(lang, "decisions_needed"),
-                decisions=decisions,
-                data={"state": state.model_dump()},
-            )
 
         # Phase 6: Assemble BOM
         await self._publish(conversation_id, task_id, "status", "Assembling BOM...")
