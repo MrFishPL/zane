@@ -15,6 +15,8 @@ log = structlog.get_logger()
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
+ALLOWED_BUCKETS = {"uploads", "temp", "exports"}
+
 # Content types served inline (displayed in browser)
 INLINE_TYPES = {
     "image/png",
@@ -60,6 +62,12 @@ def serve_file(path: str):
 
     bucket = parts[0]
     object_path = parts[1]
+
+    if bucket not in ALLOWED_BUCKETS:
+        raise HTTPException(status_code=400, detail=f"Invalid bucket: {bucket}")
+
+    if ".." in object_path:
+        raise HTTPException(status_code=400, detail="Invalid path")
 
     try:
         data = minio_client.download_file(bucket, object_path)

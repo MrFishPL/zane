@@ -34,7 +34,7 @@ class TestUploadValid:
             assert data["filename"] == "test.pdf"
             assert data["content_type"] == "application/pdf"
             assert "upload_id" in data
-            assert data["path"].startswith("minio://uploads/")
+            assert data["path"].startswith("uploads/")
 
     def test_upload_png(self, client, mock_minio):
         with patch(
