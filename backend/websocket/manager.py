@@ -93,7 +93,7 @@ class ConnectionManager:
         """Listen to Redis pub/sub and forward messages to WebSocket clients."""
         pubsub = None
         try:
-            pubsub = await redis_client.subscribe_status(conversation_id, callback=None)
+            pubsub = await redis_client.subscribe_status(conversation_id)
 
             while conversation_id in self._connections:
                 message = await pubsub.get_message(

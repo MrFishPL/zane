@@ -8,12 +8,11 @@ import structlog
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from services import minio_client
+from config import DEFAULT_USER_ID
 
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/api", tags=["upload"])
-
-DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 

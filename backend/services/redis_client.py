@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Callable
 
 import redis.asyncio as aioredis
 import structlog
@@ -58,7 +57,6 @@ async def publish_task(task_payload: dict) -> None:
 
 async def subscribe_status(
     conversation_id: str,
-    callback: Callable[[dict], None],
 ) -> aioredis.client.PubSub:
     """Subscribe to agent status updates for a conversation.
 

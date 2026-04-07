@@ -8,12 +8,11 @@ from pydantic import BaseModel
 import structlog
 
 from services import supabase_client, minio_client
+from config import DEFAULT_USER_ID
 
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
-
-DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class CreateConversationRequest(BaseModel):
@@ -45,8 +44,11 @@ def get_conversation(conversation_id: str):
     try:
         conv = supabase_client.get_conversation(conversation_id)
     except Exception as exc:
-        log.error("conversations.get.error", conversation_id=conversation_id, error=str(exc))
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        error_msg = str(exc)
+        if "not found" in error_msg.lower() or "0 rows" in error_msg.lower():
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        log.error("conversations.get.error", conversation_id=conversation_id, error=error_msg)
+        raise HTTPException(status_code=500, detail="Internal server error")
     return conv
 
 
