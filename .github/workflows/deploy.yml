@@ -15,10 +15,12 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           password: ${{ secrets.DEPLOY_PASSWORD }}
+          envs: GH_TOKEN,DOTENV
           script: |
             set -e
 
             APP_DIR="/opt/zane"
+            REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/MrFishPL/zane.git"
 
             # First run: install Docker if missing
             if ! command -v docker &> /dev/null; then
@@ -27,19 +29,20 @@ jobs:
 
             # First run: clone repo
             if [ ! -d "$APP_DIR" ]; then
-              git clone https://github.com/MrFishPL/zane.git "$APP_DIR"
+              git clone "$REPO_URL" "$APP_DIR"
             fi
 
             cd "$APP_DIR"
+
+            # Configure git to use token for this repo
+            git remote set-url origin "$REPO_URL"
 
             # Pull latest code
             git fetch origin master
             git reset --hard origin/master
 
             # Write .env from secret
-            cat > .env << 'ENVEOF'
-            ${{ secrets.DOTENV }}
-            ENVEOF
+            printf '%s\n' "$DOTENV" > .env
 
             # Build and deploy
             docker compose down --remove-orphans
@@ -49,3 +52,6 @@ jobs:
             echo "Waiting for services to start..."
             sleep 15
             docker compose ps
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOTENV: ${{ secrets.DOTENV }}
