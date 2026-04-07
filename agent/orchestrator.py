@@ -210,7 +210,10 @@ class Orchestrator:
                     render_data = _safe_json(render_result)
                     pages = render_data.get("pages", [])
 
-                    for i, page_path in enumerate(pages):
+                    for i, page_info in enumerate(pages):
+                        # page_info is a dict with number, classification, minio_path
+                        page_minio_path = page_info.get("minio_path", page_info) if isinstance(page_info, dict) else page_info
+
                         try:
                             text_result = await self._router.call_tool(
                                 "extract_text", {"pdf_path": path, "page_number": i + 1},
@@ -223,7 +226,7 @@ class Orchestrator:
 
                         try:
                             img_result = await self._router.call_tool(
-                                "get_image_base64", {"image_path": page_path},
+                                "get_image_base64", {"image_path": page_minio_path},
                             )
                             img_data = _safe_json(img_result)
                             if img_data.get("base64"):
