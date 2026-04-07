@@ -182,25 +182,6 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
           </span>
         </td>
 
-        {/* Lifecycle */}
-        <td className="px-3 py-2.5 text-sm whitespace-nowrap">
-          {comp.lifecycle && comp.lifecycle !== "unknown" && comp.lifecycle !== "Unknown" ? (
-            <span
-              className={
-                comp.lifecycle === "Active"
-                  ? "text-success"
-                  : comp.lifecycle === "NRND" || comp.lifecycle === "Last Time Buy"
-                  ? "text-warning"
-                  : "text-text-secondary"
-              }
-            >
-              {comp.lifecycle}
-            </span>
-          ) : (
-            <span className="text-text-muted">—</span>
-          )}
-        </td>
-
         {/* Distributor */}
         <td className="px-3 py-2.5 text-sm text-text-secondary whitespace-nowrap">
           {comp.distributor}
@@ -284,7 +265,6 @@ export default function BOMTable({
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-right">Qty</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-right">Price</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-right">Stock</th>
-              <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Lifecycle</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Distributor</th>
               <th className="px-2 py-2.5 w-6" />
             </tr>

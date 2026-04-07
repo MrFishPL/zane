@@ -331,6 +331,98 @@ class TMEClient:
             log.error("tme_client.search_mpn.error", duration_ms=duration_ms, exc_info=True)
             raise
 
+    async def get_categories(self, category_id: int | None = None) -> dict[str, Any]:
+        """Get TME category tree (or subtree starting from category_id)."""
+        start = time.monotonic()
+        log.info("tme_client.get_categories", category_id=category_id)
+
+        params: dict[str, Any] = {"Tree": "true"}
+        if category_id is not None:
+            params["CategoryId"] = str(category_id)
+
+        try:
+            data = await self._call("Products/GetCategories", params)
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.info("tme_client.get_categories.ok", duration_ms=duration_ms)
+            return data
+        except Exception:
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.error("tme_client.get_categories.error", duration_ms=duration_ms, exc_info=True)
+            raise
+
+    async def get_parameters(self, symbols: list[str]) -> dict[str, Any]:
+        """Get technical parameters for products (resistance, package, voltage, etc.)."""
+        start = time.monotonic()
+        log.info("tme_client.get_parameters", count=len(symbols))
+
+        try:
+            data = await self._call("Products/GetParameters", {"SymbolList": symbols[:50]})
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.info("tme_client.get_parameters.ok", duration_ms=duration_ms)
+            return data
+        except Exception:
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.error("tme_client.get_parameters.error", duration_ms=duration_ms, exc_info=True)
+            raise
+
+    async def get_similar_products(self, symbols: list[str]) -> dict[str, Any]:
+        """Find similar/alternative products for given symbols."""
+        start = time.monotonic()
+        log.info("tme_client.get_similar_products", count=len(symbols))
+
+        try:
+            data = await self._call("Products/GetSimilarProducts", {"SymbolList": symbols[:50]})
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.info("tme_client.get_similar_products.ok", duration_ms=duration_ms)
+            return data
+        except Exception:
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.error("tme_client.get_similar_products.error", duration_ms=duration_ms, exc_info=True)
+            raise
+
+    async def search_parts_in_category(self, query: str, category_id: str) -> dict[str, Any]:
+        """Search for components within a specific TME category."""
+        start = time.monotonic()
+        log.info("tme_client.search_parts_in_category", query=query[:200], category_id=category_id)
+
+        try:
+            search_data = await self._call("Products/Search", {
+                "SearchPlain": query,
+                "SearchCategory": category_id,
+                "SearchWithStock": "true",
+            })
+
+            products = search_data.get("ProductList", [])[:5]
+            total = search_data.get("Amount", 0)
+
+            if not products:
+                duration_ms = round((time.monotonic() - start) * 1000)
+                log.info("tme_client.search_parts_in_category.empty", duration_ms=duration_ms)
+                return {"hits": 0, "results": []}
+
+            symbols = [p["Symbol"] for p in products]
+            pricing_data = await self._call(
+                "Products/GetPricesAndStocks",
+                {"SymbolList": symbols, "Currency": "PLN"},
+                rate_limited=True,
+            )
+
+            pricing_map = {p["Symbol"]: p for p in pricing_data.get("ProductList", [])}
+
+            results = []
+            for product in products:
+                sym = product["Symbol"]
+                results.append(self._compress_product(product, pricing_map.get(sym)))
+
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.info("tme_client.search_parts_in_category.ok", hits=total, results=len(results), duration_ms=duration_ms)
+            return {"hits": total, "results": results}
+
+        except Exception:
+            duration_ms = round((time.monotonic() - start) * 1000)
+            log.error("tme_client.search_parts_in_category.error", duration_ms=duration_ms, exc_info=True)
+            raise
+
     async def multi_match(self, mpns: list[str]) -> dict[str, Any]:
         """Batch lookup of multiple MPNs.
 

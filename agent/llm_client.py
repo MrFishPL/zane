@@ -93,7 +93,7 @@ class LLMClient:
         if output_schema:
             base_kwargs["output_format"] = {
                 "type": "json_schema",
-                "json_schema": output_schema,
+                **output_schema,
             }
 
         if tools:

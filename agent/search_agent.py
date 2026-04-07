@@ -1,9 +1,9 @@
-"""Focused search sub-agent with tool loop.
+"""Focused search sub-agent with ReAct + Reflexion tool loop.
 
 Dispatched by the orchestrator (one per component) to find a specific
-electronic part.  Uses a subset of MCP tools (TME search + web
-search fallback) and iterates until it finds a match or exhausts
-the iteration budget.
+electronic part on TME.  Uses structured reasoning (think tool),
+TME search tools, and iterates with self-reflection until it finds
+a match or exhausts the iteration budget.
 """
 
 from __future__ import annotations
@@ -18,21 +18,47 @@ from models import ComponentSpec, SearchResult
 log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# Tool definitions available to the search sub-agent
+# Tool definitions available to the search sub-agent (TME-only)
 # ---------------------------------------------------------------------------
 
 SEARCH_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "think",
+            "description": (
+                "Use this tool to plan your search strategy, reflect on failed attempts, "
+                "or reason about which result best matches the spec. "
+                "Call this BEFORE your first search and AFTER any failed search to adjust strategy."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reasoning": {
+                        "type": "string",
+                        "description": "Your step-by-step reasoning about the search strategy or reflection on results",
+                    },
+                },
+                "required": ["reasoning"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_parts",
-            "description": "Search for electronic components on TME by keyword.",
+            "description": (
+                "Search for electronic components on TME by keyword. "
+                "Returns top 5 results with pricing, stock, and TME product URLs. "
+                "Tips: use simple terms like '100nF 0603 capacitor', '10uH inductor SMD', "
+                "'SMA connector PCB'. TME search works best with value + type keywords."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search query (e.g. '100nF 0402 capacitor')",
+                        "description": "Search query (e.g. '100nF 0402 capacitor', '10k 0603 resistor')",
                     },
                 },
                 "required": ["query"],
@@ -42,8 +68,33 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "search_parts_in_category",
+            "description": (
+                "Search for components within a specific TME category. "
+                "More precise than search_parts — use after finding the right category via get_categories. "
+                "Especially useful for connectors, inductors, and other specialized components."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query within the category",
+                    },
+                    "category_id": {
+                        "type": "string",
+                        "description": "TME category ID (from get_categories)",
+                    },
+                },
+                "required": ["query", "category_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_mpn",
-            "description": "Search for a specific manufacturer part number (MPN) or TME symbol.",
+            "description": "Search for a specific manufacturer part number (MPN) or TME symbol. Use when you know the exact part number.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -59,110 +110,190 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "search_distributor",
-            "description": "Search for a component on distributor websites via web search. Fallback when TME returns no results.",
+            "name": "get_categories",
+            "description": (
+                "Get TME category tree. Call with no arguments to get top-level categories, "
+                "or pass parent_id to drill into subcategories. "
+                "Returns category IDs, names, and product counts. "
+                "Use this to find the right category for search_parts_in_category."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query for the component",
-                    },
-                    "site": {
-                        "type": "string",
-                        "description": "Distributor site to search (e.g. 'digikey.com')",
+                    "parent_id": {
+                        "type": "integer",
+                        "description": "Parent category ID to get subcategories (omit for top-level)",
                     },
                 },
-                "required": ["query"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "fetch_product_page",
-            "description": "Fetch and extract product information from a distributor product page URL.",
+            "name": "get_product_details",
+            "description": (
+                "Get detailed technical parameters for specific TME product symbols. "
+                "Returns resistance, capacitance, package, voltage rating, etc. "
+                "Use this to verify that a found product actually matches the spec constraints."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "URL of the distributor product page",
+                    "symbols": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of TME product symbols to get details for",
                     },
                 },
-                "required": ["url"],
+                "required": ["symbols"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_similar_products",
+            "description": (
+                "Find alternative/similar products for given TME symbols. "
+                "Use when the best match is out of stock or too expensive."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbols": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of TME product symbols to find alternatives for",
+                    },
+                },
+                "required": ["symbols"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_result",
+            "description": (
+                "Submit the final sourcing result. You MUST call this tool when done searching. "
+                "Do NOT write a text response — ALWAYS use this tool to return your result."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["found", "not_found"],
+                        "description": "Whether a matching component was found on TME",
+                    },
+                    "ref": {"type": "string", "description": "Component reference designator"},
+                    "mpn": {"type": "string", "description": "Manufacturer part number (from TME search results, never invented)"},
+                    "manufacturer": {"type": "string", "description": "Manufacturer name"},
+                    "description": {"type": "string", "description": "Short component description"},
+                    "unit_price": {"type": "number", "description": "Unit price from TME"},
+                    "currency": {"type": "string", "description": "Price currency (usually PLN)"},
+                    "total_stock": {"type": "integer", "description": "Total stock on TME"},
+                    "distributor": {"type": "string", "description": "Always 'TME'"},
+                    "distributor_stock": {"type": "integer", "description": "Stock on TME"},
+                    "distributor_url": {"type": "string", "description": "TME product URL from search results (tme_url field)"},
+                    "constraints_reasoning": {"type": "string", "description": "Why this part matches (or doesn't match) the spec constraints"},
+                    "reason": {"type": "string", "description": "Reason for not_found status"},
+                },
+                "required": ["status", "ref"],
             },
         },
     },
 ]
 
 _SEARCH_SYSTEM_PROMPT = """\
-You are a component search agent. Find a specific electronic component and return sourcing details.
+You are an expert electronic component sourcing agent. Your job is to find \
+a specific component on TME (Transfer Multisort Elektronik) that matches the \
+given specification.
 
-Use the available tools to search on TME and distributor websites.
+## METHOD: ReAct (Reason → Act → Observe → Reflect)
 
-## Search strategy
-1. Start with the most specific query (exact value + package if known).
-2. If no results, broaden progressively (drop package, use synonyms).
-3. If TME fails after 3+ attempts, use search_distributor as fallback.
-4. If a specific MPN is mentioned, try search_mpn first.
+For EVERY search task, follow this loop:
 
-## Rules
-- Stock must be > 0. Prefer parts with stock > required quantity.
-- Price must be > 0. Use actual prices from search results.
-- MPN must come from search results — NEVER invent one.
-- distributor_url must come from search results or be null.
+1. **THINK FIRST** — Always call the `think` tool before your first search to plan your strategy. \
+Analyze the component spec and decide which search approach to use.
 
-## CRITICAL: Response format
+2. **ACT** — Execute a search using one of the TME tools.
 
-YOUR FINAL RESPONSE MUST BE ONLY A RAW JSON OBJECT. NO EXPLANATIONS. NO MARKDOWN. NO COMMENTARY.
-Do NOT write any text before or after the JSON. Do NOT use markdown code fences.
-Do NOT explain your reasoning in the response — put reasoning in "constraints_reasoning".
+3. **OBSERVE** — Examine the results. Do any match the spec?
 
-Output ONLY this JSON:
-{"status":"found","ref":"R1","mpn":"RC0603FR-0710KL","manufacturer":"Yageo","description":"10k 0603 1%","unit_price":0.004,"currency":"USD","total_stock":500000000,"distributor":"DigiKey","distributor_stock":1200000,"distributor_url":"https://...","octopart_url":"https://...","median_price_1000":null,"constraints_reasoning":"Matches spec exactly","reason":null}
+4. **REFLECT** — If results don't match, call `think` again to analyze WHY and adjust. \
+Don't repeat the same query — change your approach based on what you learned.
 
-Fields: status ("found"/"not_found"/"error"), ref, mpn, manufacturer, description, unit_price, currency, total_stock, distributor, distributor_stock, distributor_url, octopart_url, median_price_1000, constraints_reasoning, reason.
+5. **SUBMIT** — When you find a match (or exhaust all strategies), call `submit_result`.
+
+## SEARCH STRATEGIES BY COMPONENT TYPE
+
+### Resistors / Capacitors / Simple Passives
+1. search_parts with value + package (e.g. "10k 0603 resistor")
+2. If too many results, add tolerance or other constraints
+3. If no results, try without package, then without tolerance
+
+### Inductors
+1. search_parts with value + package (e.g. "10uH 0805 inductor")
+2. If no results, try broader: "10uH inductor SMD"
+3. Browse categories: get_categories → find "Inductors" → search_parts_in_category
+4. Verify with get_product_details to check current rating, DCR, etc.
+
+### Connectors (SMA, USB, headers, terminal blocks, etc.)
+Connectors are HARD to find by keyword. Use this strategy:
+1. If MPN is known, search_mpn first
+2. search_parts with connector type + key specs (e.g. "SMA female PCB edge mount")
+3. If no results, get_categories → navigate to the connector subcategory → search_parts_in_category
+4. Try different naming: "SMA jack" vs "SMA socket" vs "SMA connector", \
+"pin header" vs "goldpin", "2-pin" vs "2 pin" vs "2P"
+
+### ICs / Transistors / Specific Part Numbers
+1. search_mpn with the exact part number
+2. If not found, search_parts with the part number as query
+3. Try common variations: with/without suffix (e.g. "LM317T" vs "LM317")
+
+### LEDs / Diodes / Crystals / Switches
+1. search_parts with type + key specs (e.g. "LED red 0603", "crystal 8MHz SMD")
+2. If no results, try category browsing
+
+## TME SEARCH TIPS
+- TME keyword search works best with SHORT, SPECIFIC queries
+- Include component TYPE in the query (resistor, capacitor, inductor, connector)
+- Use standard value notation: 10k, 100nF, 4.7uH
+- For packages: use common names (0603, 0805, SOT-23, DIP-8)
+- If a query returns 0 results, try SHORTER and SIMPLER queries
+- If a query returns too many irrelevant results, try CATEGORY search
+
+## RULES
+- ALL data must come from TME search results — NEVER invent MPNs, prices, or URLs
+- Stock must be > 0
+- Use the `tme_url` field from results for distributor_url
+- distributor is always "TME"
+- currency is usually "PLN" (TME default)
+- When multiple results match, prefer: lowest price (if priority=price), \
+highest stock (if priority=availability), best brand (if priority=quality)
+
+## CRITICAL
+- Call `think` before your first search to plan, and when you need to change strategy
+- Do NOT call `think` on every iteration — only when you need to reason through a problem
+- You can combine `think` with a search tool in the SAME turn to save iterations
+- ALWAYS call `submit_result` to return your answer — never write plain text
+- You have a limited budget — don't repeat failed queries, change approach instead
 """
 
 # Maximum characters for a single tool result before truncation
 _MAX_TOOL_RESULT_CHARS = 50_000
 
-# JSON schema for structured output fallback
-_SEARCH_RESULT_SCHEMA = {
-    "name": "search_result",
-    "schema": {
-        "type": "object",
-        "properties": {
-            "status": {"type": "string", "enum": ["found", "not_found", "error"]},
-            "ref": {"type": "string"},
-            "mpn": {"type": ["string", "null"]},
-            "manufacturer": {"type": ["string", "null"]},
-            "description": {"type": ["string", "null"]},
-            "unit_price": {"type": ["number", "null"]},
-            "currency": {"type": ["string", "null"]},
-            "total_stock": {"type": ["integer", "null"]},
-            "distributor": {"type": ["string", "null"]},
-            "distributor_stock": {"type": ["integer", "null"]},
-            "distributor_url": {"type": ["string", "null"]},
-            "octopart_url": {"type": ["string", "null"]},
-            "median_price_1000": {},
-            "constraints_reasoning": {"type": ["string", "null"]},
-            "reason": {"type": ["string", "null"]},
-        },
-        "required": ["status", "ref"],
-    },
-}
-
 
 class SearchAgent:
-    """Focused sub-agent that searches for a single component."""
+    """Focused sub-agent that searches for a single component on TME."""
 
     def __init__(
         self,
         llm_client,
         mcp_router,
-        max_iterations: int = 10,
+        max_iterations: int = 15,
     ) -> None:
         self._llm = llm_client
         self._router = mcp_router
@@ -193,8 +324,13 @@ class SearchAgent:
             value=spec.value,
         )
 
-        for iteration in range(self._max_iterations):
-            log.info("search_iteration", ref=spec.ref, iteration=iteration)
+        search_iterations = 0
+        total_turns = 0
+        max_total_turns = self._max_iterations * 2  # hard cap to prevent infinite loops
+
+        while search_iterations < self._max_iterations and total_turns < max_total_turns:
+            total_turns += 1
+            log.info("search_iteration", ref=spec.ref, iteration=search_iterations, turn=total_turns)
 
             response = await self._llm.chat(
                 messages,
@@ -208,33 +344,57 @@ class SearchAgent:
             tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
 
             if not tool_use_blocks:
-                # No tool calls — extract text from content blocks
+                # No tool calls — extract text and try to parse as result
                 text = ""
                 for block in response.content:
                     if hasattr(block, "text"):
                         text = block.text
                         break
                 result = self._parse_answer(text, spec.ref)
-                # If parsing failed, reformat via structured output
                 if result.status == "error" and "parse" in (result.reason or "").lower():
                     log.info("search_reformat", ref=spec.ref)
                     result = await self._reformat_answer(text, spec.ref)
                 return result
 
+            # Check if the model called submit_result (final answer tool)
+            submit_blocks = [b for b in tool_use_blocks if b.name == "submit_result"]
+            if submit_blocks:
+                data = submit_blocks[0].input
+                data.setdefault("ref", spec.ref)
+                data.setdefault("status", "not_found")
+                log.info("search_agent_submit", ref=spec.ref, status=data["status"])
+                return SearchResult.model_validate(data)
+
             # Execute each tool call and collect results
             tool_results = []
+            has_real_tool = False
             for block in tool_use_blocks:
                 tool_name = block.name
-                arguments = block.input  # already a dict, not JSON string
+                arguments = block.input
 
                 log.info(
                     "search_tool_call",
                     ref=spec.ref,
                     tool=tool_name,
                     arguments=arguments,
-                    iteration=iteration,
+                    iteration=search_iterations,
                 )
 
+                # Handle the think tool locally (no MCP call needed)
+                if tool_name == "think":
+                    log.info(
+                        "search_agent_think",
+                        ref=spec.ref,
+                        reasoning=arguments.get("reasoning", "")[:300],
+                    )
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Reasoning recorded. Proceed with your next action.",
+                    })
+                    continue
+
+                has_real_tool = True
                 try:
                     result = await self._router.call_tool(tool_name, arguments)
                     result_str = json.dumps(result) if not isinstance(result, str) else result
@@ -257,11 +417,15 @@ class SearchAgent:
                     "content": result_str,
                 })
 
+            # Only count iterations that made real tool calls (not think-only)
+            if has_real_tool:
+                search_iterations += 1
+
             # Send all tool results in a single user message
             messages.append({"role": "user", "content": tool_results})
 
         # Exhausted iteration budget
-        log.warning("search_agent_max_iterations", ref=spec.ref, max=self._max_iterations)
+        log.warning("search_agent_max_iterations", ref=spec.ref, search_iters=search_iterations, total_turns=total_turns)
         return SearchResult(
             status="error",
             ref=spec.ref,
@@ -275,12 +439,20 @@ class SearchAgent:
     async def _reformat_answer(self, raw_text: str, ref: str) -> SearchResult:
         """Reformat a verbose LLM answer into structured JSON via a second call."""
         try:
+            reformat_prompt = (
+                "Extract the component sourcing data from the text below and return ONLY a raw JSON object.\n"
+                "No explanations, no markdown, no commentary — just the JSON.\n\n"
+                "Required fields: status (found/not_found/error), ref, mpn, manufacturer, "
+                "description, unit_price, currency, total_stock, distributor, distributor_stock, "
+                "distributor_url, constraints_reasoning, reason.\n"
+                "Use null for unknown fields.\n\n"
+                f"Text:\n{raw_text[:5000]}"
+            )
             response = await self._llm.chat(
                 [
-                    {"role": "system", "content": "Extract the component sourcing data from the text and return it as JSON."},
-                    {"role": "user", "content": raw_text[:5000]},
+                    {"role": "user", "content": reformat_prompt},
+                    {"role": "assistant", "content": "{"},
                 ],
-                output_schema=_SEARCH_RESULT_SCHEMA,
                 max_tokens=1024,
             )
             text = ""
@@ -288,7 +460,7 @@ class SearchAgent:
                 if hasattr(block, "text"):
                     text = block.text
                     break
-            data = json.loads(text)
+            data = json.loads("{" + text)
             data.setdefault("ref", ref)
             data.setdefault("status", "not_found")
             return SearchResult.model_validate(data)
@@ -307,7 +479,7 @@ class SearchAgent:
         context: str,
     ) -> str:
         parts = [
-            f"Find a sourcing match for this component:",
+            f"Find this component on TME:",
             f"  Reference: {spec.ref}",
             f"  Type: {spec.type}",
         ]
@@ -323,12 +495,11 @@ class SearchAgent:
             constraints_str = ", ".join(f"{k}={v}" for k, v in spec.constraints.items())
             parts.append(f"  Constraints: {constraints_str}")
 
-        parts.append(f"  Quantity per unit: {spec.quantity_per_unit}")
-        parts.append(f"  Production volume: {production_volume}")
+        parts.append(f"  Quantity needed: {spec.quantity_per_unit * production_volume}")
         parts.append(f"  Priority: {priority}")
 
         if context:
-            parts.append(f"\nAdditional context: {context}")
+            parts.append(f"\nCircuit context: {context}")
 
         return "\n".join(parts)
 
@@ -346,20 +517,34 @@ class SearchAgent:
                 lines = lines[:-1]
             content = "\n".join(lines)
 
+        # Try direct parse
         try:
             data = json.loads(content)
             if isinstance(data, dict):
-                # Ensure ref is set
                 data.setdefault("ref", ref)
                 data.setdefault("status", "not_found")
                 return SearchResult.model_validate(data)
-        except (json.JSONDecodeError, ValueError) as exc:
-            log.warning(
-                "search_answer_parse_error",
-                ref=ref,
-                error=str(exc),
-                content_preview=content[:200],
-            )
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Try to extract a JSON object embedded in verbose text
+        first_brace = content.find("{")
+        last_brace = content.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            candidate = content[first_brace : last_brace + 1]
+            try:
+                data = json.loads(candidate)
+                if isinstance(data, dict) and "status" in data:
+                    data.setdefault("ref", ref)
+                    return SearchResult.model_validate(data)
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        log.warning(
+            "search_answer_parse_error",
+            ref=ref,
+            content_preview=content[:200],
+        )
 
         return SearchResult(
             status="error",

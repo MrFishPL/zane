@@ -82,6 +82,68 @@ async def search_mpn(mpn: str) -> dict:
 
 
 @mcp.tool()
+async def search_parts_in_category(query: str, category_id: str) -> dict:
+    """Search for components within a specific TME category. Use get_categories first to find the right category ID."""
+    start = time.monotonic()
+    try:
+        result = await client.search_parts_in_category(query, category_id)
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("search_parts_in_category", f"query={query}, cat={category_id}", duration_ms, True)
+        return result
+    except Exception as exc:
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("search_parts_in_category", f"query={query}, cat={category_id}", duration_ms, False, str(exc))
+        return {"error": str(exc), "results": []}
+
+
+@mcp.tool()
+async def get_categories(parent_id: int | None = None) -> dict:
+    """Get TME category tree. Pass parent_id to get subcategories of a specific category. Returns category IDs, names, and product counts."""
+    start = time.monotonic()
+    try:
+        result = await client.get_categories(parent_id)
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("get_categories", f"parent_id={parent_id}", duration_ms, True)
+        return result
+    except Exception as exc:
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("get_categories", f"parent_id={parent_id}", duration_ms, False, str(exc))
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+async def get_product_details(symbols: list[str]) -> dict:
+    """Get detailed technical parameters for specific TME product symbols. Returns resistance, capacitance, package, voltage, etc."""
+    start = time.monotonic()
+    symbols_str = ", ".join(symbols[:5])
+    try:
+        result = await client.get_parameters(symbols)
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("get_product_details", f"symbols=[{symbols_str}]", duration_ms, True)
+        return result
+    except Exception as exc:
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("get_product_details", f"symbols=[{symbols_str}]", duration_ms, False, str(exc))
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+async def get_similar_products(symbols: list[str]) -> dict:
+    """Find alternative/similar products for given TME symbols. Useful when a specific part is unavailable or too expensive."""
+    start = time.monotonic()
+    symbols_str = ", ".join(symbols[:5])
+    try:
+        result = await client.get_similar_products(symbols)
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("get_similar_products", f"symbols=[{symbols_str}]", duration_ms, True)
+        return result
+    except Exception as exc:
+        duration_ms = round((time.monotonic() - start) * 1000)
+        _log_tool_call("get_similar_products", f"symbols=[{symbols_str}]", duration_ms, False, str(exc))
+        return {"error": str(exc)}
+
+
+@mcp.tool()
 async def multi_match(mpns: list[str]) -> dict:
     """Batch lookup of multiple MPNs at once. Returns results for each MPN."""
     start = time.monotonic()

@@ -123,22 +123,37 @@ async def _generate_title(conversation_id: str, first_message: str) -> None:
         import anthropic
 
         client = anthropic.AsyncAnthropic(api_key=api_key)
-        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
         response = await client.messages.create(
-            model=model,
-            max_tokens=30,
-            system="Generate a short title (max 6 words) for this conversation. Return only the title, no quotes.",
+            model="claude-haiku-4-5-20251001",
+            max_tokens=20,
+            system=(
+                "Generate a short title (3-6 words) for a conversation about electronic component sourcing. "
+                "Return ONLY the title text. No markdown, no quotes, no explanation."
+            ),
             messages=[
-                {"role": "user", "content": first_message[:500]},
+                {"role": "user", "content": first_message[:300]},
             ],
         )
         title = ""
         for block in response.content:
             if hasattr(block, "text"):
-                title = block.text.strip().strip('"')
+                title = block.text.strip().strip('"').strip('#').strip()
                 break
+        # Truncate to max 60 chars
+        if title and len(title) > 60:
+            title = title[:57] + "..."
         if title:
             supabase_client.update_conversation(conversation_id, title)
+            # Push title update via Redis pub/sub so the frontend gets it in real-time
+            try:
+                from services import redis_client
+                rc = redis_client.get_client()
+                await rc.publish(
+                    f"agent:status:{conversation_id}",
+                    json.dumps({"type": "title_update", "title": title}),
+                )
+            except Exception:
+                pass  # non-critical
             log.info(
                 "messages.title.generated",
                 conversation_id=conversation_id,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ComponentSpec(BaseModel):
@@ -31,9 +31,18 @@ class SearchResult(BaseModel):
     distributor_stock: int | None = None
     distributor_url: str | None = None
     octopart_url: str | None = None
-    median_price_1000: dict | None = None
+    median_price_1000: float | None = None
     constraints_reasoning: str | None = None
     reason: str | None = None
+
+    @field_validator("median_price_1000", mode="before")
+    @classmethod
+    def _coerce_median_price(cls, v):
+        if isinstance(v, str):
+            if v.strip().lower() == "null":
+                return None
+            return float(v)
+        return v
 
     @property
     def is_found(self) -> bool:

@@ -25,8 +25,10 @@ multiple pages, analyze every one.
    - `constraints`: Any additional constraints as key-value pairs \
      (e.g. {"voltage_rating": "50V", "power_rating": "0.25W"})
 
-3. **Group identical components.** If R1 and R4 are both "8.2k 0603 1%", emit \
-one entry with quantity_per_unit=2 and ref="R1, R4".
+3. **MANDATORY: Group identical components.** If R1 and R4 are both "8.2k 0603 1%", \
+you MUST emit ONE entry with quantity_per_unit=2 and ref="R1, R4". \
+Two components are identical when they have the same type, value, package, \
+tolerance, and constraints. NEVER output duplicate entries — always merge them.
 
 4. **NEVER invent values.** If a value is not visible in the image or text, leave \
 it as an empty string. Do not guess resistance values, capacitor values, or IC \

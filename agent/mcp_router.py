@@ -27,11 +27,12 @@ _TOOL_SERVER_MAP: dict[str, str] = {
     "extract_text": "mcp-documents",
     # mcp-tme
     "search_parts": "mcp-tme",
+    "search_parts_in_category": "mcp-tme",
     "search_mpn": "mcp-tme",
     "multi_match": "mcp-tme",
-    # mcp-websearch
-    "search_distributor": "mcp-websearch",
-    "fetch_product_page": "mcp-websearch",
+    "get_categories": "mcp-tme",
+    "get_product_details": "mcp-tme",
+    "get_similar_products": "mcp-tme",
     # mcp-export
     "generate_csv": "mcp-export",
     "generate_kicad_library": "mcp-export",

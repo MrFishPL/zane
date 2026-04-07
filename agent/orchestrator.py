@@ -83,7 +83,10 @@ class Orchestrator:
         lang = _detect_lang(message)
 
         # Phase 1: Parse attachments
-        await self._publish(conversation_id, task_id, "status", "Analyzing uploaded files...")
+        att_count = len(attachments)
+        if att_count > 0:
+            await self._publish(conversation_id, task_id, "status",
+                                f"Processing {att_count} uploaded file{'s' if att_count > 1 else ''}...")
         images, texts = await self._phase1_parse_attachments(attachments)
 
         if not images and not texts and not message.strip():
@@ -93,10 +96,13 @@ class Orchestrator:
             )
 
         # Phase 2: Analyze schematic
-        await self._publish(conversation_id, task_id, "status", "Analyzing schematic...")
+        page_info = f" ({len(images)} page{'s' if len(images) > 1 else ''})" if images else ""
+        await self._publish(conversation_id, task_id, "status",
+                            f"Analyzing schematic{page_info} — identifying components...")
         analysis = await self._phase2_analyze_schematic(images, texts, message)
 
-        components = [ComponentSpec(**c) for c in analysis.get("components", [])]
+        raw_components = [ComponentSpec(**c) for c in analysis.get("components", [])]
+        components = self._dedup_components(raw_components)
         production_volume = analysis.get("production_volume", 1)
         priority = analysis.get("priority", "price")
         context = analysis.get("context", "")
@@ -109,17 +115,23 @@ class Orchestrator:
 
         # Phase 3: Search components
         count = len(components)
-        await self._publish(conversation_id, task_id, "status", f"Searching for {count} components...")
+        await self._publish(conversation_id, task_id, "status",
+                            f"Searching TME for {count} component{'s' if count > 1 else ''} "
+                            f"(priority: {priority}, volume: {production_volume})...")
         search_results = await self._phase3_search_components(
             components, priority, production_volume, context,
         )
 
+        found = sum(1 for r in search_results if r.is_found)
+        await self._publish(conversation_id, task_id, "status",
+                            f"Search complete — found {found}/{count} components. Assembling BOM...")
+
         # Phase 6: Assemble BOM
-        await self._publish(conversation_id, task_id, "status", "Assembling BOM...")
         bom = self._phase6_assemble_bom(components, search_results, [], production_volume)
 
         # Phase 7: Generate exports
-        await self._publish(conversation_id, task_id, "status", "Generating export files...")
+        await self._publish(conversation_id, task_id, "status",
+                            "Generating export files (CSV, KiCad, Altium)...")
         export_files = await self._phase7_generate_exports(bom, conversation_id)
 
         return self._build_recommendation(task_id, bom, export_files, production_volume, priority, lang)
@@ -432,6 +444,26 @@ class Orchestrator:
                 "export_files": export_files,
             },
         )
+
+    @staticmethod
+    def _dedup_components(components: list[ComponentSpec]) -> list[ComponentSpec]:
+        """Merge components with identical specs into single entries."""
+        groups: dict[tuple, ComponentSpec] = {}
+        for c in components:
+            key = (c.type.lower(), c.value.lower(), c.package.lower(), c.tolerance.lower(),
+                   json.dumps(c.constraints, sort_keys=True))
+            if key in groups:
+                existing = groups[key]
+                existing.quantity_per_unit += c.quantity_per_unit
+                existing.ref = f"{existing.ref}, {c.ref}"
+                if c.description and not existing.description:
+                    existing.description = c.description
+            else:
+                groups[key] = c.model_copy()
+        deduped = list(groups.values())
+        if len(deduped) < len(components):
+            log.info("dedup_components", before=len(components), after=len(deduped))
+        return deduped
 
     @staticmethod
     def _pick_best_offer(sellers: list[dict]) -> tuple[str | None, dict | None]:

@@ -193,16 +193,25 @@ export default function Home() {
         setAgentStatus(IDLE_STATUS);
 
         // Update conversation status in sidebar
+        const resultConvId = activeId;
         setConversations((prev) =>
           prev.map((c) =>
-            c.id === activeId ? { ...c, agent_status: "completed" } : c
+            c.id === resultConvId ? { ...c, agent_status: "completed" } : c
           )
         );
 
         // Re-fetch messages from the API to get the saved assistant response
-        if (activeId) {
-          getConversation(activeId)
-            .then((detail) => setMessages(detail.messages || []))
+        if (resultConvId) {
+          getConversation(resultConvId)
+            .then((detail) => {
+              // Only update messages if we're still on the same conversation
+              setActiveId((currentId) => {
+                if (currentId === resultConvId) {
+                  setMessages(detail.messages || []);
+                }
+                return currentId;
+              });
+            })
             .catch(() => {});
         }
       }
