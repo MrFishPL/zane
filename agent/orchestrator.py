@@ -6,6 +6,22 @@ from typing import Any, Callable, Coroutine
 
 import structlog
 
+
+def _safe_json(result: Any) -> Any:
+    """Parse MCP tool result to dict/list, tolerating non-JSON responses."""
+    if isinstance(result, (dict, list)):
+        return result
+    if isinstance(result, str):
+        text = result.strip()
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            log.warning("safe_json_parse_failed", preview=text[:200])
+            return {"raw": text}
+    return {"raw": str(result)}
+
 from llm_client import LLMClient
 from mcp_router import MCPRouter
 from models import (
@@ -191,7 +207,7 @@ class Orchestrator:
                     render_result = await self._router.call_tool(
                         "render_pdf_pages", {"pdf_path": path},
                     )
-                    render_data = json.loads(render_result) if isinstance(render_result, str) else render_result
+                    render_data = _safe_json(render_result)
                     pages = render_data.get("pages", [])
 
                     for i, page_path in enumerate(pages):
@@ -199,7 +215,7 @@ class Orchestrator:
                             text_result = await self._router.call_tool(
                                 "extract_text", {"pdf_path": path, "page_number": i + 1},
                             )
-                            text_data = json.loads(text_result) if isinstance(text_result, str) else text_result
+                            text_data = _safe_json(text_result)
                             if text_data.get("text"):
                                 texts.append(text_data["text"])
                         except Exception as e:
@@ -209,7 +225,7 @@ class Orchestrator:
                             img_result = await self._router.call_tool(
                                 "get_image_base64", {"image_path": page_path},
                             )
-                            img_data = json.loads(img_result) if isinstance(img_result, str) else img_result
+                            img_data = _safe_json(img_result)
                             if img_data.get("base64"):
                                 images.append(img_data["base64"])
                         except Exception as e:
@@ -223,7 +239,7 @@ class Orchestrator:
                     img_result = await self._router.call_tool(
                         "get_image_base64", {"image_path": path},
                     )
-                    img_data = json.loads(img_result) if isinstance(img_result, str) else img_result
+                    img_data = _safe_json(img_result)
                     if img_data.get("base64"):
                         images.append(img_data["base64"])
                 except Exception as e:
@@ -298,7 +314,7 @@ class Orchestrator:
                 batch_result = await self._router.call_tool(
                     "multi_match", {"mpns": list(known_mpns.values())},
                 )
-                batch_data = json.loads(batch_result) if isinstance(batch_result, str) else batch_result
+                batch_data = _safe_json(batch_result)
                 results_map = batch_data.get("results", {})
                 for ref, mpn in known_mpns.items():
                     if mpn in results_map and results_map[mpn].get("results"):
@@ -394,7 +410,7 @@ class Orchestrator:
                 if tool_name == "generate_csv":
                     args["bom_summary"] = bom_summary
                 result = await self._router.call_tool(tool_name, args)
-                data = json.loads(result) if isinstance(result, str) else result
+                data = _safe_json(result)
                 if data.get("file_path"):
                     export_files.append(data["file_path"])
             except Exception as e:
