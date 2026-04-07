@@ -20,11 +20,6 @@ log = structlog.get_logger()
 
 API_BASE = "https://api.tme.eu"
 
-# Rate limit: 2 req/s for price/stock endpoints, 10 req/s for others.
-# We use a simple semaphore + sleep to stay under the stricter limit.
-_PRICE_RATE_LOCK = asyncio.Lock()
-_LAST_PRICE_CALL = 0.0
-
 
 def _sign_request(
     action: str,
@@ -91,6 +86,16 @@ class TMEClient:
         self._app_secret = app_secret or os.environ.get("TME_APP_SECRET", "")
         self._language = language or os.environ.get("TME_LANGUAGE", "EN")
         self._country = country or os.environ.get("TME_COUNTRY", "PL")
+        self._http = httpx.AsyncClient(timeout=30.0)
+        # Rate limiters (instance-scoped, safe across event loop restarts)
+        self._price_lock = asyncio.Lock()
+        self._last_price_call = 0.0
+        self._general_lock = asyncio.Lock()
+        self._last_general_call = 0.0
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client."""
+        await self._http.aclose()
 
     async def _call(
         self,
@@ -100,13 +105,19 @@ class TMEClient:
     ) -> dict[str, Any]:
         """Make a signed POST request to the TME API."""
         # Enforce rate limit for price/stock endpoints (2 req/s)
-        global _LAST_PRICE_CALL
         if rate_limited:
-            async with _PRICE_RATE_LOCK:
-                elapsed = time.monotonic() - _LAST_PRICE_CALL
+            async with self._price_lock:
+                elapsed = time.monotonic() - self._last_price_call
                 if elapsed < 0.5:
                     await asyncio.sleep(0.5 - elapsed)
-                _LAST_PRICE_CALL = time.monotonic()
+                self._last_price_call = time.monotonic()
+
+        # Enforce general rate limit (10 req/s)
+        async with self._general_lock:
+            elapsed = time.monotonic() - self._last_general_call
+            if elapsed < 0.1:
+                await asyncio.sleep(0.1 - elapsed)
+            self._last_general_call = time.monotonic()
 
         # Add auth params
         params["Token"] = self._token
@@ -121,12 +132,11 @@ class TMEClient:
 
         api_url = f"{API_BASE}/{action}.json"
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                api_url,
-                data=flat_params,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+        response = await self._http.post(
+            api_url,
+            data=flat_params,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
 
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After", "5")
