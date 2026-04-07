@@ -64,6 +64,7 @@ class MinIOClient:
 
     def download_file(self, bucket: str, path: str) -> bytes:
         """Download an object from MinIO and return its bytes."""
+        response = None
         try:
             response = self._client.get_object(bucket, path)
             data = response.read()
@@ -72,8 +73,9 @@ class MinIOClient:
             log.error("file_download_failed", bucket=bucket, path=path, error=str(exc))
             raise FileNotFoundError(f"Object not found: minio://{bucket}/{path}") from exc
         finally:
-            try:
-                response.close()
-                response.release_conn()
-            except Exception:
-                pass
+            if response is not None:
+                try:
+                    response.close()
+                    response.release_conn()
+                except Exception:
+                    pass

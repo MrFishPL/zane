@@ -32,7 +32,7 @@ async def health(request):
 async def search_distributor(query: str, site: str) -> dict:
     """Search a specific distributor site for electronic components.
 
-    Uses OpenAI-powered web search to find components on distributor websites.
+    Uses LLM-powered web search to find components on distributor websites.
 
     Args:
         query: Component search query (e.g. "STM32F103C8T6", "100nF 0402 capacitor").
