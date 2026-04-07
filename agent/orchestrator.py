@@ -244,7 +244,15 @@ class Orchestrator:
             if b64.startswith("data:"):
                 image_urls.append(b64)
             else:
-                image_urls.append(f"data:image/jpeg;base64,{b64}")
+                # Detect media type from base64 magic bytes
+                media_type = "image/jpeg"
+                if b64.startswith("iVBOR"):
+                    media_type = "image/png"
+                elif b64.startswith("R0lGOD"):
+                    media_type = "image/gif"
+                elif b64.startswith("UklGR"):
+                    media_type = "image/webp"
+                image_urls.append(f"data:{media_type};base64,{b64}")
 
         log.info("phase2.inputs", num_images=len(image_urls), num_texts=len(texts),
                  user_text_len=len(user_text), img_prefix=image_urls[0][:50] if image_urls else "none")

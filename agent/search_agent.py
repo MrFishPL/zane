@@ -97,11 +97,9 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
 ]
 
 _SEARCH_SYSTEM_PROMPT = """\
-You are a focused component search agent. Your ONLY job is to find a specific
-electronic component and return its sourcing details.
+You are a component search agent. Find a specific electronic component and return sourcing details.
 
-You will receive a component specification. Use the available tools to search
-for it on Nexar/Octopart and distributor websites.
+Use the available tools to search on Nexar/Octopart and distributor websites.
 
 ## Search strategy
 1. Start with the most specific query (exact value + package if known).
@@ -109,36 +107,52 @@ for it on Nexar/Octopart and distributor websites.
 3. If Nexar fails after 3+ attempts, use search_distributor as fallback.
 4. If a specific MPN is mentioned, try search_mpn first.
 
-## CRITICAL rules
-- Stock must be > 0.  Prefer parts with stock > required quantity.
-- Price must be > 0.  Use actual prices from search results.
+## Rules
+- Stock must be > 0. Prefer parts with stock > required quantity.
+- Price must be > 0. Use actual prices from search results.
 - MPN must come from search results — NEVER invent one.
 - distributor_url must come from search results or be null.
 
-## Response format
-When you have found a suitable part (or exhausted your search budget),
-respond with a JSON object (no markdown fences) with these fields:
-{
-  "status": "found" or "not_found" or "error",
-  "ref": "<component reference>",
-  "mpn": "<manufacturer part number or null>",
-  "manufacturer": "<manufacturer or null>",
-  "description": "<part description or null>",
-  "unit_price": <float or null>,
-  "currency": "<currency code or null>",
-  "total_stock": <int or null>,
-  "distributor": "<distributor name or null>",
-  "distributor_stock": <int or null>,
-  "distributor_url": "<url or null>",
-  "octopart_url": "<url or null>",
-  "median_price_1000": <object or null>,
-  "constraints_reasoning": "<why this part matches or null>",
-  "reason": "<reason if not_found/error or null>"
-}
+## CRITICAL: Response format
+
+YOUR FINAL RESPONSE MUST BE ONLY A RAW JSON OBJECT. NO EXPLANATIONS. NO MARKDOWN. NO COMMENTARY.
+Do NOT write any text before or after the JSON. Do NOT use markdown code fences.
+Do NOT explain your reasoning in the response — put reasoning in "constraints_reasoning".
+
+Output ONLY this JSON:
+{"status":"found","ref":"R1","mpn":"RC0603FR-0710KL","manufacturer":"Yageo","description":"10k 0603 1%","unit_price":0.004,"currency":"USD","total_stock":500000000,"distributor":"DigiKey","distributor_stock":1200000,"distributor_url":"https://...","octopart_url":"https://...","median_price_1000":null,"constraints_reasoning":"Matches spec exactly","reason":null}
+
+Fields: status ("found"/"not_found"/"error"), ref, mpn, manufacturer, description, unit_price, currency, total_stock, distributor, distributor_stock, distributor_url, octopart_url, median_price_1000, constraints_reasoning, reason.
 """
 
 # Maximum characters for a single tool result before truncation
 _MAX_TOOL_RESULT_CHARS = 50_000
+
+# JSON schema for structured output fallback
+_SEARCH_RESULT_SCHEMA = {
+    "name": "search_result",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "status": {"type": "string", "enum": ["found", "not_found", "error"]},
+            "ref": {"type": "string"},
+            "mpn": {"type": ["string", "null"]},
+            "manufacturer": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "unit_price": {"type": ["number", "null"]},
+            "currency": {"type": ["string", "null"]},
+            "total_stock": {"type": ["integer", "null"]},
+            "distributor": {"type": ["string", "null"]},
+            "distributor_stock": {"type": ["integer", "null"]},
+            "distributor_url": {"type": ["string", "null"]},
+            "octopart_url": {"type": ["string", "null"]},
+            "median_price_1000": {},
+            "constraints_reasoning": {"type": ["string", "null"]},
+            "reason": {"type": ["string", "null"]},
+        },
+        "required": ["status", "ref"],
+    },
+}
 
 
 class SearchAgent:
@@ -200,7 +214,12 @@ class SearchAgent:
                     if hasattr(block, "text"):
                         text = block.text
                         break
-                return self._parse_answer(text, spec.ref)
+                result = self._parse_answer(text, spec.ref)
+                # If parsing failed, reformat via structured output
+                if result.status == "error" and "parse" in (result.reason or "").lower():
+                    log.info("search_reformat", ref=spec.ref)
+                    result = await self._reformat_answer(text, spec.ref)
+                return result
 
             # Execute each tool call and collect results
             tool_results = []
@@ -252,6 +271,33 @@ class SearchAgent:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    async def _reformat_answer(self, raw_text: str, ref: str) -> SearchResult:
+        """Reformat a verbose LLM answer into structured JSON via a second call."""
+        try:
+            response = await self._llm.chat(
+                [
+                    {"role": "system", "content": "Extract the component sourcing data from the text and return it as JSON."},
+                    {"role": "user", "content": raw_text[:5000]},
+                ],
+                output_schema=_SEARCH_RESULT_SCHEMA,
+                max_tokens=1024,
+            )
+            text = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    text = block.text
+                    break
+            data = json.loads(text)
+            data.setdefault("ref", ref)
+            data.setdefault("status", "not_found")
+            return SearchResult.model_validate(data)
+        except Exception as exc:
+            log.warning("search_reformat_error", ref=ref, error=str(exc)[:200])
+            return SearchResult(
+                status="error", ref=ref,
+                reason=f"Could not parse search agent response: {raw_text[:200]}",
+            )
 
     @staticmethod
     def _build_user_message(

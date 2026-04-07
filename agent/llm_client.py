@@ -79,6 +79,9 @@ class LLMClient:
             else:
                 api_messages.append(msg)
 
+        # Pop output_schema if provided — used for structured outputs
+        output_schema = kwargs.pop("output_schema", None)
+
         base_kwargs: dict[str, Any] = {
             "model": self.model,
             "max_tokens": kwargs.pop("max_tokens", 4096),
@@ -86,6 +89,12 @@ class LLMClient:
             "messages": api_messages,
             **kwargs,
         }
+
+        if output_schema:
+            base_kwargs["output_format"] = {
+                "type": "json_schema",
+                "json_schema": output_schema,
+            }
 
         if tools:
             # Convert OpenAI tool format to Anthropic format
@@ -106,6 +115,11 @@ class LLMClient:
             call_kwargs = {**base_kwargs, "timeout": timeout_secs}
 
             try:
+                if output_schema:
+                    return await self._client.beta.messages.create(
+                        betas=["structured-outputs-2025-11-13"],
+                        **call_kwargs,
+                    )
                 return await self._client.messages.create(**call_kwargs)
             except APITimeoutError:
                 if attempt < len(timeouts) - 1:
