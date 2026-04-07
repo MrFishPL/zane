@@ -62,8 +62,6 @@ function RecommendationView({ data, messageTxt }: { data: JsonData; messageTxt: 
     distributor: c.distributor || "",
     distributor_url: c.distributor_url || (c.octopart_url ? c.octopart_url : ""),
     datasheet_url: c.datasheet_url || "",
-    snapmagic_available: c.snapmagic_available ?? c.cad_available ?? false,
-    snapmagic_url: c.snapmagic_url || c.cad_url || "",
     mpn_confidence: c.mpn_confidence || "verified",
     verified: c.verified ?? true,
     warnings: c.warnings || [],

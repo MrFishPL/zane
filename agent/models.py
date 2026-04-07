@@ -57,18 +57,10 @@ class Decision(BaseModel):
     chosen: str | None = None
 
 
-class CADStatus(BaseModel):
-    mpn: str
-    available: bool
-    url: str | None = None
-    formats: list[str] = Field(default_factory=list)
-
-
 class BOMEntry(BaseModel):
     ref: str
     component: ComponentSpec
     search_result: SearchResult
-    cad_status: CADStatus | None = None
     quantity_total: int = 0
 
 
@@ -83,7 +75,6 @@ class OrchestratorState(BaseModel):
     context: str = ""
     components: list[ComponentSpec] = Field(default_factory=list)
     search_results: list[SearchResult] = Field(default_factory=list)
-    cad_statuses: list[CADStatus] = Field(default_factory=list)
     decisions: list[Decision] = Field(default_factory=list)
     export_files: list[str] = Field(default_factory=list)
 

@@ -5,7 +5,6 @@ Verifies the complete flow:
   -> Phase 1 (parse attachments)
   -> Phase 2 (analyze schematic)
   -> Phase 3 (search components)
-  -> Phase 4 (CAD check)
   -> Phase 6 (assemble BOM)
   -> Phase 7 (generate exports)
   -> final recommendation result
@@ -79,15 +78,6 @@ SUB_AGENT_ANSWER = json.dumps({
     "reason": None,
 })
 
-# Phase 4 CAD check result
-CAD_CHECK_RESULT = json.dumps({
-    SUB_AGENT_MPN: {
-        "available": True,
-        "url": "https://www.snapeda.com/parts/RC0603FR-0710KL/Yageo/view-part/",
-        "formats": ["KiCad", "Altium", "Eagle"],
-    },
-})
-
 # Phase 7 export results
 CSV_EXPORT_RESULT = json.dumps({"file_path": "exports/conv-integration-001/bom.csv"})
 KICAD_EXPORT_RESULT = json.dumps({"file_path": "exports/conv-integration-001/library.kicad_sym"})
@@ -118,10 +108,9 @@ def mock_router() -> AsyncMock:
       2. extract_text            (Phase 1)
       3. get_image_base64        (Phase 1)
       4. multi_match             (Phase 3 -- batch pre-search)
-      5. check_cad_batch         (Phase 4)
-      6. generate_csv            (Phase 7)
-      7. generate_kicad_library  (Phase 7)
-      8. generate_altium_library (Phase 7)
+      5. generate_csv            (Phase 7)
+      6. generate_kicad_library  (Phase 7)
+      7. generate_altium_library (Phase 7)
     """
     router = AsyncMock()
     router.call_tool = AsyncMock(side_effect=[
@@ -129,10 +118,9 @@ def mock_router() -> AsyncMock:
         EXTRACT_TEXT_RESULT,     # 2. Phase 1: extract_text
         IMAGE_BASE64_RESULT,     # 3. Phase 1: get_image_base64
         MULTI_MATCH_RESULT,      # 4. Phase 3: multi_match (empty -- "10k" is not an MPN)
-        CAD_CHECK_RESULT,        # 5. Phase 4: check_cad_batch
-        CSV_EXPORT_RESULT,       # 6. Phase 7: generate_csv
-        KICAD_EXPORT_RESULT,     # 7. Phase 7: generate_kicad_library
-        ALTIUM_EXPORT_RESULT,    # 8. Phase 7: generate_altium_library
+        CSV_EXPORT_RESULT,       # 5. Phase 7: generate_csv
+        KICAD_EXPORT_RESULT,     # 6. Phase 7: generate_kicad_library
+        ALTIUM_EXPORT_RESULT,    # 7. Phase 7: generate_altium_library
     ])
     router.close = AsyncMock()
     return router
@@ -176,7 +164,7 @@ def mock_llm() -> MagicMock:
 async def test_full_pipeline_pdf_to_recommendation(
     mock_llm, mock_router, mock_state_mgr, mock_publish,
 ):
-    """End-to-end pipeline: PDF -> parse -> analyze -> search -> CAD -> BOM -> exports."""
+    """End-to-end pipeline: PDF -> parse -> analyze -> search -> BOM -> exports."""
 
     orch = Orchestrator(mock_llm, mock_router, mock_state_mgr, mock_publish)
 
@@ -209,7 +197,6 @@ async def test_full_pipeline_pdf_to_recommendation(
     assert entry["unit_price"] == 0.004
     assert entry["currency"] == "USD"
     assert entry["status"] == "found"
-    assert entry["cad_available"] is True
 
     # --- Verify export file paths ---
     assert "bom.csv" in export_files[0]
@@ -224,10 +211,10 @@ async def test_full_pipeline_pdf_to_recommendation(
     assert "1/1" in result.message
 
     # --- Verify publish was called for each phase status ---
-    assert mock_publish.call_count >= 5  # at least: parse, analyze, search, CAD, BOM, exports
+    assert mock_publish.call_count >= 4  # at least: parse, analyze, search, BOM, exports
 
-    # --- Verify MCP call_tool was called exactly 8 times ---
-    assert mock_router.call_tool.call_count == 8
+    # --- Verify MCP call_tool was called exactly 7 times ---
+    assert mock_router.call_tool.call_count == 7
 
     # Verify the tool call sequence by tool name
     call_args_list = mock_router.call_tool.call_args_list
@@ -237,7 +224,6 @@ async def test_full_pipeline_pdf_to_recommendation(
         "extract_text",
         "get_image_base64",
         "multi_match",
-        "check_cad_batch",
         "generate_csv",
         "generate_kicad_library",
         "generate_altium_library",

@@ -89,20 +89,6 @@ services:
       timeout: 5s
       retries: 5
 
-  mcp-snapmagic:
-    build: ./mcp-snapmagic
-    ports:
-      - "8002:8002"
-    environment:
-      TAVILY_API_KEY: ${TAVILY_API_KEY}
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\" || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   mcp-documents:
     build: ./mcp-documents
     ports:
@@ -191,8 +177,6 @@ services:
       redis:
         condition: service_healthy
       mcp-nexar:
-        condition: service_healthy
-      mcp-snapmagic:
         condition: service_healthy
       mcp-documents:
         condition: service_healthy

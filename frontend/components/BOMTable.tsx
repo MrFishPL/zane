@@ -13,8 +13,6 @@ interface Alternative {
   unit_price: number;
   stock?: number;
   note: string;
-  snapmagic_available?: boolean;
-  snapmagic_url?: string;
 }
 
 interface Component {
@@ -33,10 +31,6 @@ interface Component {
   distributor: string;
   distributor_url: string;
   datasheet_url?: string;
-  snapmagic_url?: string;
-  snapmagic_available: boolean;
-  snapmagic_formats?: string[];
-  needs_cad_decision?: boolean;
   mpn_confidence?: string;
   verified?: boolean;
   warnings: string[];
@@ -212,40 +206,6 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
           {comp.distributor}
         </td>
 
-        {/* SnapMagic */}
-        <td className="px-3 py-2.5 text-sm text-center">
-          {comp.snapmagic_available ? (
-            <a
-              href={comp.snapmagic_url || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-success hover:text-success/80 transition-colors"
-              title={
-                comp.snapmagic_formats
-                  ? `Available: ${comp.snapmagic_formats.join(", ")}`
-                  : "Available on SnapMagic"
-              }
-            >
-              <svg className="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </a>
-          ) : comp.needs_cad_decision ? (
-            <span
-              className="text-warning cursor-help text-xs font-medium"
-              title="No CAD model — check alternatives for CAD-available options"
-            >
-              !!
-            </span>
-          ) : (
-            <span className="text-text-muted">—</span>
-          )}
-        </td>
-
         {/* Warning indicator */}
         <td className="px-2 py-2.5 text-sm">
           {hasWarnings && (
@@ -274,7 +234,7 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
           {comp.alternatives?.map((alt, i) => (
             <tr
               key={`${comp.ref}-alt-${i}`}
-              className={`border-b border-border/30 ${alt.snapmagic_available ? "bg-success/5" : "bg-bg-tertiary/50"}`}
+              className="border-b border-border/30 bg-bg-tertiary/50"
             >
               <td />
               <td className="px-3 py-2 text-xs text-text-muted">Alt</td>
@@ -286,9 +246,6 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
               </td>
               <td colSpan={3} className="px-3 py-2 text-xs text-text-muted italic">
                 {alt.note}
-                {alt.snapmagic_available && (
-                  <span className="ml-2 text-success font-medium not-italic">CAD</span>
-                )}
               </td>
               <td className="px-3 py-2 text-xs text-text-secondary text-right">
                 {formatPrice(alt.unit_price, currency)}
@@ -329,7 +286,6 @@ export default function BOMTable({
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-right">Stock</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Lifecycle</th>
               <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider">Distributor</th>
-              <th className="px-3 py-2.5 text-xs font-medium text-text-muted uppercase tracking-wider text-center">CAD</th>
               <th className="px-2 py-2.5 w-6" />
             </tr>
           </thead>

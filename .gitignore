@@ -16,3 +16,6 @@ minio-data/
 redis-data/
 grafana-data/
 loki-data/
+.agents/
+.mcp.json
+skills-lock.json

@@ -2,7 +2,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from orchestrator import Orchestrator
-from models import BOMEntry, ComponentSpec, SearchResult, OrchestratorState, AgentResult, CADStatus
+from models import BOMEntry, ComponentSpec, SearchResult, OrchestratorState, AgentResult
 
 
 @pytest.fixture
@@ -101,15 +101,11 @@ async def test_phase6_assemble_bom(mock_llm, mock_router, mock_state_mgr, mock_p
                                     unit_price=0.004, currency="USD", total_stock=500000000,
                                     distributor="DigiKey", distributor_stock=100000,
                                     distributor_url="https://...", octopart_url="https://...")]
-    cad_statuses = [CADStatus(mpn="RC0603FR-0710KL", available=True, url="https://snapeda.com/...")]
-
     orch = Orchestrator(mock_llm, mock_router, mock_state_mgr, mock_publish)
-    bom = orch._phase6_assemble_bom(components, search_results, cad_statuses, [], 1000)
+    bom = orch._phase6_assemble_bom(components, search_results, [], 1000)
     assert len(bom) == 1
     assert bom[0].quantity_total == 4000
     assert bom[0].search_result.mpn == "RC0603FR-0710KL"
-    assert bom[0].cad_status is not None
-    assert bom[0].cad_status.available is True
 
 
 @pytest.mark.asyncio
@@ -122,7 +118,7 @@ async def test_phase6_missing_search_result(mock_llm, mock_router, mock_state_mg
     search_results = [SearchResult(status="found", ref="R1", mpn="RES-10K")]
 
     orch = Orchestrator(mock_llm, mock_router, mock_state_mgr, mock_publish)
-    bom = orch._phase6_assemble_bom(components, search_results, [], [], 1)
+    bom = orch._phase6_assemble_bom(components, search_results, [], 1)
     assert len(bom) == 2
     assert bom[0].search_result.status == "found"
     assert bom[1].search_result.status == "not_found"
@@ -185,25 +181,6 @@ def test_pick_best_offer_no_stock():
     assert offer is None
 
 
-def test_build_decisions_no_cad(mock_llm, mock_router, mock_state_mgr, mock_publish):
-    """_build_decisions should create decisions for missing CAD models."""
-    search_results = [
-        SearchResult(status="found", ref="R1", mpn="RES-10K", manufacturer="Yageo"),
-        SearchResult(status="found", ref="U1", mpn="LM317T", manufacturer="TI"),
-    ]
-    cad_statuses = [
-        CADStatus(mpn="RES-10K", available=True, url="https://..."),
-        CADStatus(mpn="LM317T", available=False),
-    ]
-
-    orch = Orchestrator(mock_llm, mock_router, mock_state_mgr, mock_publish)
-    decisions = orch._build_decisions(search_results, cad_statuses)
-    assert len(decisions) == 1
-    assert decisions[0].mpn == "LM317T"
-    assert decisions[0].issue == "no_cad_model"
-    assert len(decisions[0].options) == 2
-
-
 def test_build_recommendation(mock_llm, mock_router, mock_state_mgr, mock_publish):
     """_build_recommendation should produce a valid AgentResult."""
     bom = [
@@ -212,7 +189,6 @@ def test_build_recommendation(mock_llm, mock_router, mock_state_mgr, mock_publis
             component=ComponentSpec(ref="R1", type="resistor", value="10k", package="0603", quantity_per_unit=2),
             search_result=SearchResult(status="found", ref="R1", mpn="RC0603", manufacturer="Yageo",
                                        unit_price=0.01, currency="USD", total_stock=100000),
-            cad_status=CADStatus(mpn="RC0603", available=True, url="https://snapeda.com/rc0603"),
             quantity_total=2000,
         ),
     ]

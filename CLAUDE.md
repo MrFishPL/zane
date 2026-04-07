@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Web application for automated electronic component sourcing. User uploads a schematic (PDF/photo/sketch), AI agent visually analyzes it, identifies components, searches distributor APIs (Nexar/Octopart), and produces a structured BOM with pricing, stock, SnapMagic CAD model links, and downloadable CSV/KiCad/Altium exports.
+Web application for automated electronic component sourcing. User uploads a schematic (PDF/photo/sketch), AI agent visually analyzes it, identifies components, searches distributor APIs (Nexar/Octopart), and produces a structured BOM with pricing, stock, and downloadable CSV/KiCad/Altium exports.
 
 ## Architecture
 
-12 Docker containers on a single network (`app-network`):
+11 Docker containers on a single network (`app-network`):
 
 - **frontend** (Next.js :3000) — Chat UI with file upload, WebSocket status, BOM rendering
 - **backend** (FastAPI :8000) — REST API, Supabase CRUD, MinIO files, Redis pub/sub → WebSocket
@@ -16,7 +16,6 @@ Web application for automated electronic component sourcing. User uploads a sche
 - **redis** (Redis 7 :6379) — Task queue (`agent:tasks`) + pub/sub (`agent:status:{conv_id}`)
 - **minio** (MinIO :9000/:9001) — Object storage for uploads/temp/exports
 - **mcp-nexar** (:8001) — Nexar/Octopart component search (GraphQL, OAuth2)
-- **mcp-snapmagic** (:8002) — CAD model availability check (web search)
 - **mcp-documents** (:8003) — PDF rendering, image processing, base64 retrieval (MinIO)
 - **mcp-websearch** (:8004) — Web search fallback (Anthropic API with web_search tool)
 - **mcp-export** (:8005) — CSV/KiCad/Altium library generation (MinIO)

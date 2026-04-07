@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import uuid
 from typing import Any, Callable, Coroutine
 
 import structlog
@@ -10,7 +9,7 @@ import structlog
 from llm_client import LLMClient
 from mcp_router import MCPRouter
 from models import (
-    AgentResult, BOMEntry, CADStatus, ComponentSpec,
+    AgentResult, BOMEntry, ComponentSpec,
     Decision, DecisionOption, OrchestratorState, SearchResult,
 )
 from prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT
@@ -115,14 +114,9 @@ class Orchestrator:
             components, priority, production_volume, context,
         )
 
-        # Phase 4: CAD availability check
-        await self._publish(conversation_id, task_id, "status", "Checking CAD model availability...")
-        found_mpns = [sr.mpn for sr in search_results if sr.is_found and sr.mpn]
-        cad_statuses = await self._phase4_check_cad(found_mpns) if found_mpns else []
-
         # Phase 6: Assemble BOM
         await self._publish(conversation_id, task_id, "status", "Assembling BOM...")
-        bom = self._phase6_assemble_bom(components, search_results, cad_statuses, [], production_volume)
+        bom = self._phase6_assemble_bom(components, search_results, [], production_volume)
 
         # Phase 7: Generate exports
         await self._publish(conversation_id, task_id, "status", "Generating export files...")
@@ -147,7 +141,7 @@ class Orchestrator:
 
         # Phase 6
         bom = self._phase6_assemble_bom(
-            state.components, state.search_results, state.cad_statuses,
+            state.components, state.search_results,
             state.decisions, state.production_volume,
         )
 
@@ -332,68 +326,23 @@ class Orchestrator:
 
         return all_results
 
-    async def _phase4_check_cad(self, mpns: list[str]) -> list[CADStatus]:
-        """Phase 4: Batch CAD availability check."""
-        try:
-            result = await self._router.call_tool("check_cad_batch", {"mpns": mpns})
-            data = json.loads(result) if isinstance(result, str) else result
-            statuses = []
-            for mpn, status in data.items():
-                statuses.append(CADStatus(
-                    mpn=mpn,
-                    available=status.get("available", False),
-                    url=status.get("url"),
-                    formats=status.get("formats", []),
-                ))
-            return statuses
-        except Exception as e:
-            log.warning("phase4.cad_check_error", error=str(e)[:200])
-            return [CADStatus(mpn=mpn, available=False) for mpn in mpns]
-
-    def _build_decisions(
-        self, search_results: list[SearchResult], cad_statuses: list[CADStatus],
-    ) -> list[Decision]:
-        """Build decision list from missing CAD models and unfound components."""
-        decisions: list[Decision] = []
-        cad_map = {s.mpn: s for s in cad_statuses}
-
-        for sr in search_results:
-            if sr.is_found and sr.mpn and sr.mpn in cad_map:
-                cad = cad_map[sr.mpn]
-                if not cad.available:
-                    decisions.append(Decision(
-                        decision_id=str(uuid.uuid4())[:8],
-                        ref=sr.ref, mpn=sr.mpn,
-                        issue="no_cad_model",
-                        question=f"{sr.mpn} ({sr.manufacturer}) has no CAD model on SnapMagic",
-                        options=[
-                            DecisionOption(key="A", label="Add without CAD model"),
-                            DecisionOption(key="B", label="I'll find an alternative myself"),
-                        ],
-                    ))
-        return decisions
-
     def _phase6_assemble_bom(
         self,
         components: list[ComponentSpec],
         search_results: list[SearchResult],
-        cad_statuses: list[CADStatus],
         decisions: list[Decision],
         production_volume: int,
     ) -> list[BOMEntry]:
         """Phase 6: Merge everything into BOM entries."""
         result_map = {r.ref: r for r in search_results}
-        cad_map = {s.mpn: s for s in cad_statuses}
 
         bom: list[BOMEntry] = []
         for comp in components:
             sr = result_map.get(comp.ref, SearchResult(status="not_found", ref=comp.ref, reason="No search result"))
-            cad = cad_map.get(sr.mpn) if sr.mpn else None
             bom.append(BOMEntry(
                 ref=comp.ref,
                 component=comp,
                 search_result=sr,
-                cad_status=cad,
                 quantity_total=comp.quantity_per_unit * production_volume,
             ))
         return bom
@@ -457,8 +406,6 @@ class Orchestrator:
                 "octopart_url": entry.search_result.octopart_url,
                 "quantity_per_unit": entry.component.quantity_per_unit,
                 "quantity_total": entry.quantity_total,
-                "cad_available": entry.cad_status.available if entry.cad_status else None,
-                "cad_url": entry.cad_status.url if entry.cad_status else None,
                 "status": entry.search_result.status,
                 "reason": entry.search_result.reason,
             })

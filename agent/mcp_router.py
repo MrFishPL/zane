@@ -29,9 +29,6 @@ _TOOL_SERVER_MAP: dict[str, str] = {
     "search_parts": "mcp-nexar",
     "search_mpn": "mcp-nexar",
     "multi_match": "mcp-nexar",
-    # mcp-snapmagic
-    "check_cad_availability": "mcp-snapmagic",
-    "check_cad_batch": "mcp-snapmagic",
     # mcp-websearch
     "search_distributor": "mcp-websearch",
     "fetch_product_page": "mcp-websearch",
@@ -44,7 +41,6 @@ _TOOL_SERVER_MAP: dict[str, str] = {
 _DEFAULT_SERVERS: dict[str, str] = {
     "mcp-documents": "http://mcp-documents:8003",
     "mcp-nexar": "http://mcp-nexar:8001",
-    "mcp-snapmagic": "http://mcp-snapmagic:8002",
     "mcp-websearch": "http://mcp-websearch:8004",
     "mcp-export": "http://mcp-export:8005",
 }

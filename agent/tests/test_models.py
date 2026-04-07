@@ -9,7 +9,6 @@ import pytest
 from models import (
     AgentResult,
     BOMEntry,
-    CADStatus,
     ComponentSpec,
     Decision,
     DecisionOption,
@@ -171,28 +170,6 @@ class TestDecision:
 
 
 # ---------------------------------------------------------------------------
-# CADStatus
-# ---------------------------------------------------------------------------
-
-
-class TestCADStatus:
-    def test_available(self):
-        cad = CADStatus(
-            mpn="LM317T",
-            available=True,
-            url="https://snapmagic.com/parts/LM317T",
-            formats=["KiCad", "Altium", "Eagle"],
-        )
-        assert cad.available is True
-        assert len(cad.formats) == 3
-
-    def test_not_available(self):
-        cad = CADStatus(mpn="OBSCURE123", available=False)
-        assert cad.url is None
-        assert cad.formats == []
-
-
-# ---------------------------------------------------------------------------
 # BOMEntry
 # ---------------------------------------------------------------------------
 
@@ -201,13 +178,11 @@ class TestBOMEntry:
     def test_bom_entry_composition(self):
         comp = ComponentSpec(ref="R1", type="resistor", value="10k")
         sr = SearchResult(status="found", ref="R1", mpn="RC0603FR-0710KL")
-        cad = CADStatus(mpn="RC0603FR-0710KL", available=True)
         entry = BOMEntry(
-            ref="R1", component=comp, search_result=sr, cad_status=cad, quantity_total=5
+            ref="R1", component=comp, search_result=sr, quantity_total=5
         )
         assert entry.component.value == "10k"
         assert entry.search_result.is_found is True
-        assert entry.cad_status.available is True
         assert entry.quantity_total == 5
 
 
@@ -244,9 +219,6 @@ class TestOrchestratorState:
             ],
             search_results=[
                 SearchResult(status="found", ref="R1", mpn="RC0603FR-078K2L"),
-            ],
-            cad_statuses=[
-                CADStatus(mpn="RC0603FR-078K2L", available=True),
             ],
             decisions=[],
             export_files=["exports/bom.csv"],
