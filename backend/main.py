@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -104,9 +105,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Zane Backend", lifespan=lifespan)
 
+_cors_origins = os.environ.get("CORS_ORIGINS", "").split(",") if os.environ.get("CORS_ORIGINS") else [
+    "http://localhost:3000",
+    "http://localhost:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

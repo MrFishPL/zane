@@ -167,6 +167,7 @@ services:
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
     networks:
       - app-network
     depends_on:
