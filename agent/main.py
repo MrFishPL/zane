@@ -11,9 +11,17 @@ load_dotenv()
 
 structlog.configure(
     processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
         structlog.processors.JSONRenderer(),
     ],
+    wrapper_class=structlog.make_filtering_bound_logger(0),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=True,
 )
 
 log = structlog.get_logger()
@@ -30,12 +38,12 @@ async def main() -> None:
 
     shutdown_event = asyncio.Event()
 
-    def handle_signal(sig, _frame):
-        log.info("worker.shutdown_signal", signal=sig)
-        shutdown_event.set()
-
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda s=sig: (
+            log.info("worker.shutdown_signal", signal=s),
+            shutdown_event.set(),
+        ))
 
     log.info("worker.starting", redis_url=redis_url, max_concurrent=max_concurrent)
     try:
