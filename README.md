@@ -16,7 +16,7 @@ You upload a schematic (PDF, photo, or hand-drawn sketch) and describe your requ
 
 ### Demo prompt
 
-> Przygotuj liste elementow do miksera audio na podstawie dolaczonego pliku. Zastap tranzystory BC549 jakimis zamiennikami SMD, tak samo zastap uklad TDA2320 czyms tanszym. Rezystory maja miec rozmiar 0603, uzyj kondensatorow uznanych firm. Rozmiar bez znaczenia, ale do toru audio uzyj takich, ktorych dielektryk sie do tego nadaje. Kondensatory dobrze by bylo zeby byly SMD, ale nie musza byc. Priorytetyzuj niska cene przy 1000 sztuk calego urzadzenia. Liste komponentow dostosuj tak, aby mikser mial 8 kanalow. Znajdz jakies fajne gniazda jack 6,3mm do druku na wejscia i wyjscia. Potencjometry maja byc obrotowe, trwale i odporne na kurz.
+> Na schemacie znajduje sie niskoszumne LNA. Wszystkie elementy musza pracowac w zakresie temperatur -20 do 100 stopni. Na wejsciu i wyjsciu zastosuj zlacza SMA katowe. Wybierz nowoczesne odpowiedniki SMD tranzystorow ze schematu. Wszystkie elementy poza dlawikiem 1uH maja byc w rozmiarze 0603. Tolerancja dla rezystorow 1%, dla kondensatorow dowolna. Dobierz jakies zlacze zasilajace odporne na zalanie. Przy doborze elementow staraj sie uzyskac jak najnizsza cene dla 100 sztuk urzadzenia.
 
 The agent understands complex, multi-constraint requirements in any language, searches TME for each component, and returns a complete BOM optimized for your production volume.
 
