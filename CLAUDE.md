@@ -12,23 +12,23 @@ Web application for automated electronic component sourcing. User uploads a sche
 
 - **frontend** (Next.js :3000) — Chat UI with file upload, WebSocket status, BOM rendering
 - **backend** (FastAPI :8000) — REST API, Supabase CRUD, MinIO files, Redis pub/sub → WebSocket
-- **agent** (custom Orchestrator worker) — Picks tasks from Redis queue, runs a 7-phase pipeline (parse → analyze → search → CAD check → assemble BOM → export). Uses LLMClient (direct OpenAI API, GPT-5.4), SearchAgent sub-agent with tool loop, StateManager for Redis pause/resume. Interactive decisions (Phase 5) not yet implemented.
+- **agent** (custom Orchestrator worker) — Picks tasks from Redis queue, runs a 7-phase pipeline (parse → analyze → search → CAD check → assemble BOM → export). Uses LLMClient (Anthropic API, Claude), SearchAgent sub-agent with tool loop, StateManager for Redis pause/resume. Interactive decisions (Phase 5) not yet implemented.
 - **redis** (Redis 7 :6379) — Task queue (`agent:tasks`) + pub/sub (`agent:status:{conv_id}`)
 - **minio** (MinIO :9000/:9001) — Object storage for uploads/temp/exports
 - **mcp-nexar** (:8001) — Nexar/Octopart component search (GraphQL, OAuth2)
 - **mcp-snapmagic** (:8002) — CAD model availability check (web search)
 - **mcp-documents** (:8003) — PDF rendering, image processing, base64 retrieval (MinIO)
-- **mcp-websearch** (:8004) — Web search fallback (direct OpenAI API)
+- **mcp-websearch** (:8004) — Web search fallback (Anthropic API with web_search tool)
 - **mcp-export** (:8005) — CSV/KiCad/Altium library generation (MinIO)
 - **loki** (:3100) + **grafana** (:3001) — Observability
 
-External: Supabase (PostgreSQL), OpenAI API (GPT-5.4), Nexar API
+External: Supabase (PostgreSQL), Anthropic API (Claude), Nexar API
 
 ## Environment
 
 All credentials in `.env` (gitignored). See `.env.example` for template.
 
-Key vars: `OPENAI_API_KEY`, `OPENAI_MODEL`, `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `REDIS_URL`, `MINIO_ENDPOINT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
+Key vars: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `REDIS_URL`, `MINIO_ENDPOINT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
 
 ## Commands
 

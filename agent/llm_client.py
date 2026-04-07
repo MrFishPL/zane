@@ -1,4 +1,4 @@
-"""Thin wrapper around AsyncOpenAI with retry and JSON extraction."""
+"""Thin wrapper around AsyncAnthropic with retry and JSON extraction."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 import structlog
-from openai import AsyncOpenAI, APITimeoutError
+from anthropic import AsyncAnthropic, APITimeoutError
 
 logger = structlog.get_logger(__name__)
 
@@ -37,26 +37,17 @@ def _parse_json(text: str) -> dict[str, Any]:
 
 
 class LLMClient:
-    """Async OpenAI client with escalating timeout retry."""
+    """Async Anthropic client with escalating timeout retry."""
 
     def __init__(
         self,
         api_key: str | None = None,
-        base_url: str | None = None,
         model: str | None = None,
-        reasoning_effort: str | None = None,
     ) -> None:
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
-        self.base_url = base_url or os.environ.get("OPENAI_BASE_URL")
-        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
-        self.reasoning_effort = reasoning_effort or os.environ.get(
-            "OPENAI_REASONING_EFFORT"
-        )
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.model = model or os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
-        client_kwargs: dict[str, Any] = {"api_key": self.api_key}
-        if self.base_url:
-            client_kwargs["base_url"] = self.base_url
-        self._client = AsyncOpenAI(**client_kwargs)
+        self._client = AsyncAnthropic(api_key=self.api_key)
 
     async def chat(
         self,
@@ -66,73 +57,64 @@ class LLMClient:
         timeouts: list[int] | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Send a chat completion request with escalating timeout retry.
+        """Send a messages request with escalating timeout retry.
 
         Args:
-            messages: Chat messages.
-            tools: Optional tool definitions.
+            messages: Chat messages (system messages extracted automatically).
+            tools: Optional tool definitions (OpenAI format converted to Anthropic format).
             timeouts: List of timeout values in seconds to try in order.
             **kwargs: Extra params forwarded to the API.
 
         Returns:
-            The OpenAI ChatCompletion response.
+            The Anthropic Message response.
         """
         timeouts = timeouts or PHASE3_TIMEOUTS
 
+        # Extract system message from messages list
+        system_text = ""
+        api_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_text = msg["content"] if isinstance(msg["content"], str) else msg["content"]
+            else:
+                api_messages.append(msg)
+
         base_kwargs: dict[str, Any] = {
             "model": self.model,
-            "messages": messages,
+            "max_tokens": kwargs.pop("max_tokens", 4096),
+            "system": system_text,
+            "messages": api_messages,
             **kwargs,
         }
+
         if tools:
-            base_kwargs["tools"] = tools
+            # Convert OpenAI tool format to Anthropic format
+            anthropic_tools = []
+            for tool in tools:
+                if tool.get("type") == "function":
+                    fn = tool["function"]
+                    anthropic_tools.append({
+                        "name": fn["name"],
+                        "description": fn.get("description", ""),
+                        "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+                    })
+                else:
+                    anthropic_tools.append(tool)
+            base_kwargs["tools"] = anthropic_tools
 
         for attempt, timeout_secs in enumerate(timeouts):
             call_kwargs = {**base_kwargs, "timeout": timeout_secs}
 
-            # Try with reasoning_effort if configured (not compatible with tools on gpt-5.4)
-            if self.reasoning_effort and "reasoning_effort" not in call_kwargs and "tools" not in call_kwargs:
-                call_kwargs["reasoning_effort"] = self.reasoning_effort
-
             try:
-                return await self._client.chat.completions.create(**call_kwargs)
-            except (TypeError, Exception) as exc:
-                # If reasoning_effort is not supported, retry without it
-                if "reasoning_effort" in call_kwargs and (
-                    "unexpected keyword" in str(exc).lower()
-                    or "unrecognized" in str(exc).lower()
-                    or "reasoning_effort" in str(exc).lower()
-                    or isinstance(exc, TypeError)
-                ):
+                return await self._client.messages.create(**call_kwargs)
+            except APITimeoutError:
+                if attempt < len(timeouts) - 1:
                     logger.warning(
-                        "reasoning_effort not supported, retrying without",
+                        "timeout, escalating",
                         attempt=attempt,
+                        timeout=timeout_secs,
                     )
-                    call_kwargs.pop("reasoning_effort", None)
-                    self.reasoning_effort = None  # Don't try again
-                    try:
-                        return await self._client.chat.completions.create(
-                            **call_kwargs
-                        )
-                    except APITimeoutError:
-                        if attempt < len(timeouts) - 1:
-                            logger.warning(
-                                "timeout, escalating",
-                                attempt=attempt,
-                                timeout=timeout_secs,
-                            )
-                            continue
-                        raise
-
-                if isinstance(exc, APITimeoutError):
-                    if attempt < len(timeouts) - 1:
-                        logger.warning(
-                            "timeout, escalating",
-                            attempt=attempt,
-                            timeout=timeout_secs,
-                        )
-                        continue
-                    raise
+                    continue
                 raise
 
         # Should not reach here, but just in case
@@ -154,22 +136,39 @@ class LLMClient:
         Returns:
             Parsed JSON dict from the LLM response.
         """
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt},
-        ]
-
-        # Build user message content
+        # Build user message content with Anthropic image format
         content: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
         for url in image_urls or []:
-            content.append(
-                {"type": "image_url", "image_url": {"url": url}}
-            )
+            if url.startswith("data:"):
+                # Parse data URI: data:image/jpeg;base64,<data>
+                header, b64_data = url.split(",", 1)
+                media_type = header.split(":")[1].split(";")[0]
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": b64_data,
+                    },
+                })
+            else:
+                content.append({
+                    "type": "image",
+                    "source": {"type": "url", "url": url},
+                })
 
-        messages.append({"role": "user", "content": content})
+        messages = [{"role": "user", "content": content}]
 
         response = await self.chat(
-            messages, timeouts=PHASE2_TIMEOUTS, response_format={"type": "json_object"}
+            [{"role": "system", "content": system_prompt}] + messages,
+            timeouts=PHASE2_TIMEOUTS,
+            max_tokens=8192,
         )
 
-        raw = response.choices[0].message.content or "{}"
-        return _parse_json(raw)
+        # Extract text from response content blocks
+        raw = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                raw = block.text
+                break
+        return _parse_json(raw or "{}")

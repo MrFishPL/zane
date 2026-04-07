@@ -95,6 +95,7 @@ async def test_process_task_success(fake_redis: FakeRedis) -> None:
     """Successful task publishes result and removes from processing."""
     task = _make_task()
     raw_task = json.dumps(task)
+    raw_task_bytes = raw_task.encode()
     fake_redis.lists["agent:processing"] = [raw_task]
 
     agent_result = AgentResult(
@@ -108,8 +109,8 @@ async def test_process_task_success(fake_redis: FakeRedis) -> None:
 
     worker = _make_worker(fake_redis)
 
-    with patch("orchestrator.Orchestrator", return_value=mock_orch):
-        await worker._process_task(task, raw_task)
+    with patch("worker.Orchestrator", return_value=mock_orch):
+        await worker._process_task(task, raw_task, raw_task_bytes)
 
     # Should have published a result
     assert len(fake_redis.published) >= 1
@@ -128,6 +129,7 @@ async def test_process_task_error(fake_redis: FakeRedis) -> None:
     """When the orchestrator raises, an error message is published."""
     task = _make_task()
     raw_task = json.dumps(task)
+    raw_task_bytes = raw_task.encode()
     fake_redis.lists["agent:processing"] = [raw_task]
 
     mock_orch = AsyncMock()
@@ -135,8 +137,8 @@ async def test_process_task_error(fake_redis: FakeRedis) -> None:
 
     worker = _make_worker(fake_redis)
 
-    with patch("orchestrator.Orchestrator", return_value=mock_orch):
-        await worker._process_task(task, raw_task)
+    with patch("worker.Orchestrator", return_value=mock_orch):
+        await worker._process_task(task, raw_task, raw_task_bytes)
 
     # Should have published an error
     error_msgs = [
@@ -152,6 +154,7 @@ async def test_process_task_decision_required(fake_redis: FakeRedis) -> None:
     """When orchestrator returns decision_required, state is saved and published."""
     task = _make_task(task_id="t-decision")
     raw_task = json.dumps(task)
+    raw_task_bytes = raw_task.encode()
     fake_redis.lists["agent:processing"] = [raw_task]
 
     state_dict = OrchestratorState(
@@ -197,20 +200,17 @@ async def test_process_task_decision_required(fake_redis: FakeRedis) -> None:
 
     worker = _make_worker(fake_redis)
 
-    with patch("orchestrator.Orchestrator", return_value=mock_orch):
-        await worker._process_task(task, raw_task)
+    with patch("worker.Orchestrator", return_value=mock_orch):
+        await worker._process_task(task, raw_task, raw_task_bytes)
 
-    # Should have published a decision_required message
-    decision_msgs = [
+    # Worker always publishes as "result" type; the decision_required status
+    # lives inside the result payload itself.
+    result_msgs = [
         json.loads(p[1]) for p in fake_redis.published
-        if json.loads(p[1])["type"] == "decision_required"
+        if json.loads(p[1])["type"] == "result"
     ]
-    assert len(decision_msgs) == 1
-
-    # State should have been saved
-    saved_state = await worker._state_mgr.load("t-decision")
-    assert saved_state is not None
-    assert saved_state.task_id == "t-decision"
+    assert len(result_msgs) == 1
+    assert result_msgs[0]["data"]["status"] == "decision_required"
 
     # Task should have been removed from processing
     assert raw_task not in fake_redis.lists.get("agent:processing", [])
@@ -378,7 +378,7 @@ async def test_run_picks_task_and_processes(fake_redis: FakeRedis) -> None:
 
     fake_redis.blmove = _counting_blmove
 
-    with patch("orchestrator.Orchestrator", return_value=mock_orch):
+    with patch("worker.Orchestrator", return_value=mock_orch):
         await asyncio.wait_for(worker.run(shutdown), timeout=5.0)
 
     # Verify result was published

@@ -143,9 +143,9 @@ def mock_llm() -> MagicMock:
     """LLMClient mock.
 
     - analyze_schematic (Phase 2): returns the component list JSON.
-    - chat.completions.create (Phase 3 sub-agent): returns a direct
-      final answer with no tool_calls, so the sub-agent loop exits on
-      the first iteration without making any MCPRouter calls.
+    - chat (Phase 3 sub-agent): returns an Anthropic-format response
+      with text content and no tool_use blocks, so the sub-agent loop
+      exits on the first iteration without making any MCPRouter calls.
     """
     llm = MagicMock()
 
@@ -153,22 +153,14 @@ def mock_llm() -> MagicMock:
     llm.analyze_schematic = AsyncMock(return_value=ANALYSIS_RESULT)
 
     # Phase 3 -- SearchAgent calls await llm.chat(messages, tools=...)
-    # The response has content but no tool_calls, so the agent returns
-    # the parsed answer immediately.
-    sub_agent_message = MagicMock()
-    sub_agent_message.content = SUB_AGENT_ANSWER
-    sub_agent_message.tool_calls = None  # no tool calls -> final answer
-    sub_agent_message.model_dump = MagicMock(return_value={
-        "role": "assistant",
-        "content": SUB_AGENT_ANSWER,
-    })
-
-    sub_agent_choice = MagicMock()
-    sub_agent_choice.message = sub_agent_message
-    sub_agent_choice.finish_reason = "stop"
+    # Build Anthropic-format response with text content, no tool_use blocks
+    sub_agent_text = MagicMock()
+    sub_agent_text.type = "text"
+    sub_agent_text.text = SUB_AGENT_ANSWER
 
     sub_agent_response = MagicMock()
-    sub_agent_response.choices = [sub_agent_choice]
+    sub_agent_response.content = [sub_agent_text]
+    sub_agent_response.stop_reason = "end_turn"
 
     llm.chat = AsyncMock(return_value=sub_agent_response)
 

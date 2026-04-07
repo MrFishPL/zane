@@ -135,58 +135,54 @@ def fake_redis() -> FakeRedis:
 
 
 # ---------------------------------------------------------------------------
-# Mock OpenAI client
+# Mock Anthropic client
 # ---------------------------------------------------------------------------
 
 
 def make_tool_call(
-    tool_call_id: str, name: str, arguments: dict[str, Any]
+    tool_use_id: str, name: str, arguments: dict[str, Any]
 ) -> MagicMock:
-    tc = MagicMock()
-    tc.id = tool_call_id
-    tc.function.name = name
-    tc.function.arguments = json.dumps(arguments)
-    return tc
+    """Build a mock Anthropic ToolUseBlock."""
+    block = MagicMock()
+    block.type = "tool_use"
+    block.id = tool_use_id
+    block.name = name
+    block.input = arguments
+    return block
+
+
+def make_text_block(text: str) -> MagicMock:
+    """Build a mock Anthropic TextBlock."""
+    block = MagicMock()
+    block.type = "text"
+    block.text = text
+    return block
 
 
 def make_llm_response(
     content: str | None = None,
     tool_calls: list | None = None,
-    finish_reason: str = "stop",
+    stop_reason: str = "end_turn",
 ) -> MagicMock:
-    """Build a mock OpenAI chat completion response."""
-    message = MagicMock()
-    message.content = content
-    message.tool_calls = tool_calls
-    message.model_dump.return_value = {
-        "role": "assistant",
-        "content": content,
-        "tool_calls": (
-            [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in tool_calls
-            ]
-            if tool_calls
-            else None
-        ),
-    }
-
-    choice = MagicMock()
-    choice.message = message
-    choice.finish_reason = finish_reason
+    """Build a mock Anthropic Message response."""
+    blocks = []
+    if content is not None:
+        blocks.append(make_text_block(content))
+    if tool_calls:
+        blocks.extend(tool_calls)
 
     response = MagicMock()
-    response.choices = [choice]
+    response.content = blocks
+    response.stop_reason = stop_reason
     return response
 
 
+@pytest.fixture
+def mock_anthropic_client() -> AsyncMock:
+    return AsyncMock()
+
+
+# Keep legacy alias — test_search_agent.py still references it
 @pytest.fixture
 def mock_openai_client() -> AsyncMock:
     return AsyncMock()

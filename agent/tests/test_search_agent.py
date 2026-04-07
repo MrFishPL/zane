@@ -21,6 +21,20 @@ def _make_spec(
     return ComponentSpec(ref=ref, type=comp_type, value=value, package=package)
 
 
+def _make_llm_mock(*, side_effect=None, return_value=None) -> AsyncMock:
+    """Build an LLM mock whose ``.chat(...)`` is an AsyncMock.
+
+    SearchAgent calls ``self._llm.chat(messages, tools=...)``, so we need
+    ``llm.chat`` to be an awaitable returning Anthropic-format responses.
+    """
+    llm = AsyncMock()
+    if side_effect is not None:
+        llm.chat = AsyncMock(side_effect=side_effect)
+    elif return_value is not None:
+        llm.chat = AsyncMock(return_value=return_value)
+    return llm
+
+
 # ---------------------------------------------------------------------------
 # Direct find (no tools) — LLM returns answer immediately
 # ---------------------------------------------------------------------------
@@ -28,7 +42,6 @@ def _make_spec(
 
 @pytest.mark.asyncio
 async def test_direct_find_no_tools(
-    mock_openai_client: AsyncMock,
     mock_mcp_router: AsyncMock,
 ) -> None:
     """LLM returns a SearchResult directly without calling any tools."""
@@ -45,12 +58,10 @@ async def test_direct_find_no_tools(
         "distributor_url": "https://www.digikey.com/product-detail/en/GRM155R71C104KA88D",
     }
 
-    mock_openai_client.chat.completions.create = AsyncMock(
-        return_value=make_llm_response(content=json.dumps(answer))
-    )
+    llm = _make_llm_mock(return_value=make_llm_response(content=json.dumps(answer)))
 
     agent = SearchAgent(
-        llm_client=mock_openai_client,
+        llm_client=llm,
         mcp_router=mock_mcp_router,
         max_iterations=10,
     )
@@ -72,7 +83,6 @@ async def test_direct_find_no_tools(
 
 @pytest.mark.asyncio
 async def test_tool_call_then_answer(
-    mock_openai_client: AsyncMock,
     mock_mcp_router: AsyncMock,
 ) -> None:
     """LLM calls search_parts, gets result, then returns a found SearchResult."""
@@ -107,12 +117,10 @@ async def test_tool_call_then_answer(
     }
     second_response = make_llm_response(content=json.dumps(final_answer))
 
-    mock_openai_client.chat.completions.create = AsyncMock(
-        side_effect=[first_response, second_response]
-    )
+    llm = _make_llm_mock(side_effect=[first_response, second_response])
 
     agent = SearchAgent(
-        llm_client=mock_openai_client,
+        llm_client=llm,
         mcp_router=mock_mcp_router,
     )
 
@@ -135,7 +143,6 @@ async def test_tool_call_then_answer(
 
 @pytest.mark.asyncio
 async def test_max_iterations_reached(
-    mock_openai_client: AsyncMock,
     mock_mcp_router: AsyncMock,
 ) -> None:
     """When the LLM keeps calling tools without producing an answer,
@@ -149,13 +156,11 @@ async def test_max_iterations_reached(
     tc = make_tool_call("tc-loop", "search_parts", {"query": "unobtainium"})
     tool_response = make_llm_response(tool_calls=[tc])
 
-    mock_openai_client.chat.completions.create = AsyncMock(
-        return_value=tool_response
-    )
+    llm = _make_llm_mock(return_value=tool_response)
 
     max_iter = 3
     agent = SearchAgent(
-        llm_client=mock_openai_client,
+        llm_client=llm,
         mcp_router=mock_mcp_router,
         max_iterations=max_iter,
     )
@@ -165,7 +170,7 @@ async def test_max_iterations_reached(
     assert result.status == "error"
     assert result.ref == "X1"
     assert "maximum iterations" in (result.reason or "").lower()
-    assert mock_openai_client.chat.completions.create.call_count == max_iter
+    assert llm.chat.call_count == max_iter
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +180,6 @@ async def test_max_iterations_reached(
 
 @pytest.mark.asyncio
 async def test_large_tool_result_truncated(
-    mock_openai_client: AsyncMock,
     mock_mcp_router: AsyncMock,
 ) -> None:
     """Tool results exceeding 50K chars are truncated."""
@@ -188,12 +192,10 @@ async def test_large_tool_result_truncated(
     final_answer = {"status": "not_found", "ref": "C1", "reason": "Too much data"}
     second_response = make_llm_response(content=json.dumps(final_answer))
 
-    mock_openai_client.chat.completions.create = AsyncMock(
-        side_effect=[first_response, second_response]
-    )
+    llm = _make_llm_mock(side_effect=[first_response, second_response])
 
     agent = SearchAgent(
-        llm_client=mock_openai_client,
+        llm_client=llm,
         mcp_router=mock_mcp_router,
     )
 
@@ -201,13 +203,21 @@ async def test_large_tool_result_truncated(
 
     assert result.status == "not_found"
 
-    # Verify the tool result passed to the LLM was truncated
-    second_call = mock_openai_client.chat.completions.create.call_args_list[1]
-    messages = second_call.kwargs.get("messages") or second_call[1].get("messages", [])
-    tool_msgs = [m for m in messages if m.get("role") == "tool"]
-    assert len(tool_msgs) == 1
-    assert len(tool_msgs[0]["content"]) <= 50_000 + len("...[truncated]")
-    assert tool_msgs[0]["content"].endswith("...[truncated]")
+    # Verify the tool result passed to the LLM was truncated.
+    # SearchAgent appends tool results as:
+    #   {"role": "user", "content": [{"type": "tool_result", "tool_use_id": ..., "content": ...}]}
+    second_call = llm.chat.call_args_list[1]
+    messages = second_call[0][0]  # first positional arg = messages list
+    tool_result_msgs = [
+        m for m in messages
+        if m.get("role") == "user"
+        and isinstance(m.get("content"), list)
+        and any(b.get("type") == "tool_result" for b in m["content"])
+    ]
+    assert len(tool_result_msgs) == 1
+    tool_result_block = tool_result_msgs[0]["content"][0]
+    assert len(tool_result_block["content"]) <= 50_000 + len("...[truncated]")
+    assert tool_result_block["content"].endswith("...[truncated]")
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +227,6 @@ async def test_large_tool_result_truncated(
 
 @pytest.mark.asyncio
 async def test_tool_error_fed_back(
-    mock_openai_client: AsyncMock,
     mock_mcp_router: AsyncMock,
 ) -> None:
     """When a tool call raises an exception, the error is reported back to the LLM."""
@@ -231,12 +240,10 @@ async def test_tool_error_fed_back(
     final_answer = {"status": "error", "ref": "C1", "reason": "Search service unavailable"}
     second_response = make_llm_response(content=json.dumps(final_answer))
 
-    mock_openai_client.chat.completions.create = AsyncMock(
-        side_effect=[first_response, second_response]
-    )
+    llm = _make_llm_mock(side_effect=[first_response, second_response])
 
     agent = SearchAgent(
-        llm_client=mock_openai_client,
+        llm_client=llm,
         mcp_router=mock_mcp_router,
     )
 
@@ -244,12 +251,19 @@ async def test_tool_error_fed_back(
 
     assert result.status == "error"
 
-    # The second LLM call should have received an error in the tool result
-    second_call = mock_openai_client.chat.completions.create.call_args_list[1]
-    messages = second_call.kwargs.get("messages") or second_call[1].get("messages", [])
-    tool_msgs = [m for m in messages if m.get("role") == "tool"]
-    assert len(tool_msgs) == 1
-    assert "mcp-nexar down" in tool_msgs[0]["content"]
+    # The second LLM call should have received an error in the tool result.
+    # Tool results are in {"role": "user", "content": [{"type": "tool_result", ...}]}
+    second_call = llm.chat.call_args_list[1]
+    messages = second_call[0][0]
+    tool_result_msgs = [
+        m for m in messages
+        if m.get("role") == "user"
+        and isinstance(m.get("content"), list)
+        and any(b.get("type") == "tool_result" for b in m["content"])
+    ]
+    assert len(tool_result_msgs) == 1
+    tool_result_content = tool_result_msgs[0]["content"][0]["content"]
+    assert "mcp-nexar down" in tool_result_content
 
 
 # ---------------------------------------------------------------------------
@@ -259,16 +273,15 @@ async def test_tool_error_fed_back(
 
 @pytest.mark.asyncio
 async def test_non_json_answer_returns_error(
-    mock_openai_client: AsyncMock,
     mock_mcp_router: AsyncMock,
 ) -> None:
     """When the LLM returns non-JSON, SearchAgent returns an error result."""
-    mock_openai_client.chat.completions.create = AsyncMock(
+    llm = _make_llm_mock(
         return_value=make_llm_response(content="I could not find any matching parts.")
     )
 
     agent = SearchAgent(
-        llm_client=mock_openai_client,
+        llm_client=llm,
         mcp_router=mock_mcp_router,
     )
 

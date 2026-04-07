@@ -187,24 +187,26 @@ class SearchAgent:
                 tools=SEARCH_TOOLS,
             )
 
-            choice = response.choices[0]
-            assistant_msg = choice.message
+            # Append assistant message with raw content blocks
+            messages.append({"role": "assistant", "content": response.content})
 
-            # Append assistant message to conversation
-            messages.append(assistant_msg.model_dump(exclude_none=True))
+            # Check for tool use blocks
+            tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
 
-            # No tool calls means the LLM produced a final answer
-            if not assistant_msg.tool_calls:
-                return self._parse_answer(assistant_msg.content or "", spec.ref)
+            if not tool_use_blocks:
+                # No tool calls — extract text from content blocks
+                text = ""
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        text = block.text
+                        break
+                return self._parse_answer(text, spec.ref)
 
-            # Execute each tool call
-            for tool_call in assistant_msg.tool_calls:
-                fn = tool_call.function
-                tool_name = fn.name
-                try:
-                    arguments = json.loads(fn.arguments)
-                except json.JSONDecodeError:
-                    arguments = {}
+            # Execute each tool call and collect results
+            tool_results = []
+            for block in tool_use_blocks:
+                tool_name = block.name
+                arguments = block.input  # already a dict, not JSON string
 
                 log.info(
                     "search_tool_call",
@@ -216,9 +218,7 @@ class SearchAgent:
 
                 try:
                     result = await self._router.call_tool(tool_name, arguments)
-                    result_str = (
-                        json.dumps(result) if not isinstance(result, str) else result
-                    )
+                    result_str = json.dumps(result) if not isinstance(result, str) else result
                 except Exception as exc:
                     log.error(
                         "search_tool_error",
@@ -232,13 +232,14 @@ class SearchAgent:
                 if len(result_str) > _MAX_TOOL_RESULT_CHARS:
                     result_str = result_str[:_MAX_TOOL_RESULT_CHARS] + "...[truncated]"
 
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result_str,
-                    }
-                )
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result_str,
+                })
+
+            # Send all tool results in a single user message
+            messages.append({"role": "user", "content": tool_results})
 
         # Exhausted iteration budget
         log.warning("search_agent_max_iterations", ref=spec.ref, max=self._max_iterations)

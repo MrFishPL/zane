@@ -1,4 +1,4 @@
-"""Web search client using OpenAI API for component lookups."""
+"""Web search client using Anthropic API for component lookups."""
 
 from __future__ import annotations
 
@@ -7,15 +7,14 @@ import os
 import time
 from typing import Any
 
-import httpx
+import anthropic
 import structlog
 
 log = structlog.get_logger()
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = "https://api.openai.com/v1"
-MODEL = "gpt-4o-mini"
-REQUEST_TIMEOUT = 30.0
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+REQUEST_TIMEOUT = 60.0
 
 DISTRIBUTOR_SITES = [
     "mouser.com",
@@ -70,25 +69,6 @@ Extract the following information and return as a JSON object:
 Return ONLY the JSON object, nothing else. If you cannot determine a field, set it to null."""
 
 
-def _build_chat_payload(
-    system_prompt: str,
-    user_prompt: str,
-    use_web_search: bool = True,
-) -> dict[str, Any]:
-    """Build the chat completions request payload."""
-    payload: dict[str, Any] = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.1,
-    }
-    if use_web_search:
-        payload["tools"] = [{"type": "web_search_preview"}]
-    return payload
-
-
 def _parse_json_response(text: str) -> dict[str, Any]:
     """Parse JSON from an LLM response, stripping markdown fences if present."""
     cleaned = text.strip()
@@ -105,39 +85,46 @@ async def _call_llm(
     user_prompt: str,
     use_web_search: bool = True,
 ) -> dict[str, Any]:
-    """Call OpenAI API and return parsed JSON response.
+    """Call Anthropic API and return parsed JSON response.
 
-    Tries with web_search_preview tool first. If the API rejects it (e.g. tool
-    not supported), retries without the tool so the LLM answers from training data.
+    Uses web_search tool for grounded results. Falls back to no tools
+    if the API rejects the web_search tool.
     """
-    payload = _build_chat_payload(system_prompt, user_prompt, use_web_search)
-    url = f"{OPENAI_BASE_URL}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
+    client = anthropic.AsyncAnthropic(
+        api_key=ANTHROPIC_API_KEY,
+        timeout=REQUEST_TIMEOUT,
+    )
+
+    kwargs: dict[str, Any] = {
+        "model": MODEL,
+        "max_tokens": 2048,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}],
     }
 
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        try:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            # If web_search_preview tool is rejected, retry without it
-            if use_web_search and exc.response.status_code in (400, 422):
-                log.warning(
-                    "web_search_not_available",
-                    status=exc.response.status_code,
-                    detail="Falling back to LLM training data",
-                )
-                payload = _build_chat_payload(system_prompt, user_prompt, use_web_search=False)
-                resp = await client.post(url, json=payload, headers=headers)
-                resp.raise_for_status()
-            else:
-                raise
+    if use_web_search:
+        kwargs["tools"] = [{"type": "web_search_20250305"}]
 
-    data = resp.json()
-    content = data["choices"][0]["message"]["content"]
-    return _parse_json_response(content)
+    try:
+        response = await client.messages.create(**kwargs)
+    except anthropic.BadRequestError:
+        if use_web_search:
+            log.warning(
+                "web_search_not_available",
+                detail="Falling back to LLM training data",
+            )
+            kwargs.pop("tools", None)
+            response = await client.messages.create(**kwargs)
+        else:
+            raise
+
+    # Extract text from response content blocks
+    text = ""
+    for block in response.content:
+        if hasattr(block, "text"):
+            text = block.text
+            break
+    return _parse_json_response(text)
 
 
 async def search_distributor(query: str, site: str) -> dict[str, Any]:
@@ -171,7 +158,7 @@ async def search_distributor(query: str, site: str) -> dict[str, Any]:
         )
         return {"results": results}
 
-    except httpx.TimeoutException:
+    except anthropic.APITimeoutError:
         duration_ms = round((time.monotonic() - start) * 1000)
         bound_log.error("search_timeout", duration_ms=duration_ms)
         return {"results": [], "error": "LLM request timed out"}
@@ -218,7 +205,7 @@ async def fetch_product_page(url: str) -> dict[str, Any]:
         bound_log.info("fetch_completed", duration_ms=duration_ms)
         return result
 
-    except httpx.TimeoutException:
+    except anthropic.APITimeoutError:
         duration_ms = round((time.monotonic() - start) * 1000)
         bound_log.error("fetch_timeout", duration_ms=duration_ms)
         return {"error": "LLM request timed out", "url": url, "mpn_confidence": "searched"}

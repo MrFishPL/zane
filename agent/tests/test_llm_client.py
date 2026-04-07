@@ -57,45 +57,48 @@ class TestParseJson:
 
 
 def _make_response(content: str = '{"ok": true}', tool_calls=None):
-    """Build a mock OpenAI ChatCompletion response."""
-    message = MagicMock()
-    message.content = content
-    message.tool_calls = tool_calls
-
-    choice = MagicMock()
-    choice.message = message
-    choice.finish_reason = "stop"
+    """Build a mock Anthropic Message response."""
+    blocks = []
+    if content is not None:
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = content
+        blocks.append(text_block)
+    if tool_calls:
+        blocks.extend(tool_calls)
 
     response = MagicMock()
-    response.choices = [choice]
+    response.content = blocks
+    response.stop_reason = "tool_use" if tool_calls else "end_turn"
     return response
 
 
 @pytest.mark.asyncio
 class TestLLMClientChat:
     async def test_successful_call(self):
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
         mock_response = _make_response('{"result": "ok"}')
-        client._client.chat.completions.create = AsyncMock(
+        client._client.messages.create = AsyncMock(
             return_value=mock_response
         )
 
         result = await client.chat(
             [{"role": "user", "content": "hello"}]
         )
-        assert result.choices[0].message.content == '{"result": "ok"}'
+        assert result.content[0].text == '{"result": "ok"}'
 
     async def test_tool_calls_passthrough(self):
         """Verify tool definitions are forwarded to the API."""
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
 
-        tool_call = MagicMock()
-        tool_call.id = "call_1"
-        tool_call.function.name = "search_parts"
-        tool_call.function.arguments = '{"query": "8.2k 0603"}'
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.id = "call_1"
+        tool_block.name = "search_parts"
+        tool_block.input = {"query": "8.2k 0603"}
 
-        mock_response = _make_response(content=None, tool_calls=[tool_call])
-        client._client.chat.completions.create = AsyncMock(
+        mock_response = _make_response(content=None, tool_calls=[tool_block])
+        client._client.messages.create = AsyncMock(
             return_value=mock_response
         )
 
@@ -116,25 +119,24 @@ class TestLLMClientChat:
         )
 
         # Verify tools were passed to the API
-        call_kwargs = client._client.chat.completions.create.call_args
-        assert "tools" in call_kwargs.kwargs or (
-            len(call_kwargs.args) == 0 and "tools" in call_kwargs.kwargs
-        )
+        call_kwargs = client._client.messages.create.call_args
+        assert "tools" in call_kwargs.kwargs
 
-        # Verify response has tool calls
-        assert result.choices[0].message.tool_calls is not None
-        assert result.choices[0].message.tool_calls[0].function.name == "search_parts"
+        # Verify response has tool_use blocks
+        tool_use_blocks = [b for b in result.content if b.type == "tool_use"]
+        assert len(tool_use_blocks) == 1
+        assert tool_use_blocks[0].name == "search_parts"
 
     async def test_timeout_retry_escalation(self):
         """On timeout, should retry with higher timeout."""
-        from openai import APITimeoutError
+        from anthropic import APITimeoutError
 
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
 
         timeout_error = APITimeoutError(request=MagicMock())
         success_response = _make_response('{"ok": true}')
 
-        client._client.chat.completions.create = AsyncMock(
+        client._client.messages.create = AsyncMock(
             side_effect=[timeout_error, success_response]
         )
 
@@ -143,22 +145,22 @@ class TestLLMClientChat:
             timeouts=[10, 20, 30],
         )
 
-        assert result.choices[0].message.content == '{"ok": true}'
-        assert client._client.chat.completions.create.call_count == 2
+        assert result.content[0].text == '{"ok": true}'
+        assert client._client.messages.create.call_count == 2
 
         # Verify second call used higher timeout
-        calls = client._client.chat.completions.create.call_args_list
+        calls = client._client.messages.create.call_args_list
         assert calls[0].kwargs["timeout"] == 10
         assert calls[1].kwargs["timeout"] == 20
 
     async def test_all_timeouts_exhausted_raises(self):
         """If all timeouts are exhausted, the error propagates."""
-        from openai import APITimeoutError
+        from anthropic import APITimeoutError
 
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
 
         timeout_error = APITimeoutError(request=MagicMock())
-        client._client.chat.completions.create = AsyncMock(
+        client._client.messages.create = AsyncMock(
             side_effect=[timeout_error, timeout_error, timeout_error]
         )
 
@@ -168,13 +170,13 @@ class TestLLMClientChat:
                 timeouts=[10, 20, 30],
             )
 
-        assert client._client.chat.completions.create.call_count == 3
+        assert client._client.messages.create.call_count == 3
 
 
 @pytest.mark.asyncio
 class TestLLMClientAnalyzeSchematic:
     async def test_analyze_returns_parsed_json(self):
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
 
         response_content = json.dumps({
             "production_volume": 5,
@@ -184,7 +186,7 @@ class TestLLMClientAnalyzeSchematic:
             ],
         })
         mock_response = _make_response(response_content)
-        client._client.chat.completions.create = AsyncMock(
+        client._client.messages.create = AsyncMock(
             return_value=mock_response
         )
 
@@ -199,11 +201,11 @@ class TestLLMClientAnalyzeSchematic:
         assert result["components"][0]["ref"] == "R1"
 
     async def test_analyze_strips_code_fences(self):
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
 
         fenced = '```json\n{"components": []}\n```'
         mock_response = _make_response(fenced)
-        client._client.chat.completions.create = AsyncMock(
+        client._client.messages.create = AsyncMock(
             return_value=mock_response
         )
 
@@ -218,10 +220,10 @@ class TestLLMClientAnalyzeSchematic:
         """analyze_schematic should use PHASE2_TIMEOUTS."""
         from llm_client import PHASE2_TIMEOUTS
 
-        client = LLMClient(api_key="test-key", model="gpt-4o")
+        client = LLMClient(api_key="test-key", model="claude-sonnet-4-6")
 
         mock_response = _make_response('{"components": []}')
-        client._client.chat.completions.create = AsyncMock(
+        client._client.messages.create = AsyncMock(
             return_value=mock_response
         )
 
@@ -230,5 +232,5 @@ class TestLLMClientAnalyzeSchematic:
             user_text="test",
         )
 
-        call_kwargs = client._client.chat.completions.create.call_args.kwargs
+        call_kwargs = client._client.messages.create.call_args.kwargs
         assert call_kwargs["timeout"] == PHASE2_TIMEOUTS[0]

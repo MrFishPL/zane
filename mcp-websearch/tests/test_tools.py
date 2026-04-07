@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 # Add parent directory to path so we can import search_client
@@ -24,14 +23,21 @@ def _load_fixture(name: str) -> dict:
         return json.load(f)
 
 
-def _mock_response(fixture_name: str, status_code: int = 200) -> httpx.Response:
-    """Create a mock httpx.Response from a fixture file."""
+def _mock_anthropic_response(fixture_name: str) -> MagicMock:
+    """Create a mock Anthropic Message response from a fixture file."""
     data = _load_fixture(fixture_name)
-    return httpx.Response(
-        status_code=status_code,
-        json=data,
-        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
-    )
+    # Fixtures have OpenAI format: {"choices": [{"message": {"content": "..."}}]}
+    # Extract the content string
+    content_str = data["choices"][0]["message"]["content"]
+
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = content_str
+
+    response = MagicMock()
+    response.content = [text_block]
+    response.stop_reason = "end_turn"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -42,12 +48,10 @@ def _mock_response(fixture_name: str, status_code: int = 200) -> httpx.Response:
 @pytest.mark.asyncio
 async def test_search_mouser():
     """Test searching Mouser for an STM32 part."""
-    mock_resp = _mock_response("search_mouser_stm32.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_mouser_stm32.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("STM32F103C8T6", "mouser.com")
@@ -62,12 +66,10 @@ async def test_search_mouser():
 @pytest.mark.asyncio
 async def test_search_digikey():
     """Test searching DigiKey for capacitors."""
-    mock_resp = _mock_response("search_digikey_capacitor.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_digikey_capacitor.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("100nF 0402 capacitor", "digikey.com")
@@ -81,12 +83,10 @@ async def test_search_digikey():
 @pytest.mark.asyncio
 async def test_search_lcsc():
     """Test searching LCSC for resistors."""
-    mock_resp = _mock_response("search_lcsc_resistor.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_lcsc_resistor.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("100 ohm 0402 resistor", "lcsc.com")
@@ -99,12 +99,10 @@ async def test_search_lcsc():
 @pytest.mark.asyncio
 async def test_search_tme():
     """Test searching TME for connectors."""
-    mock_resp = _mock_response("search_tme_connector.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_tme_connector.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("JST XH 2-pin connector", "tme.eu")
@@ -117,12 +115,10 @@ async def test_search_tme():
 @pytest.mark.asyncio
 async def test_search_farnell():
     """Test searching Farnell for inductors."""
-    mock_resp = _mock_response("search_farnell_inductor.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_farnell_inductor.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("10uH 1210 inductor", "farnell.com")
@@ -140,12 +136,10 @@ async def test_search_farnell():
 @pytest.mark.asyncio
 async def test_fetch_product_page():
     """Test fetching and parsing a product page."""
-    mock_resp = _mock_response("fetch_product_page.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("fetch_product_page.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.fetch_product_page(
@@ -167,11 +161,13 @@ async def test_fetch_product_page():
 @pytest.mark.asyncio
 async def test_search_timeout():
     """Test that LLM timeout is handled gracefully."""
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    import anthropic as anthropic_mod
+
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.side_effect = httpx.TimeoutException("Request timed out")
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(
+            side_effect=anthropic_mod.APITimeoutError(request=MagicMock())
+        )
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("STM32F103C8T6", "mouser.com")
@@ -183,11 +179,13 @@ async def test_search_timeout():
 @pytest.mark.asyncio
 async def test_fetch_timeout():
     """Test that fetch_product_page handles timeout gracefully."""
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    import anthropic as anthropic_mod
+
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.side_effect = httpx.TimeoutException("Request timed out")
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(
+            side_effect=anthropic_mod.APITimeoutError(request=MagicMock())
+        )
         MockClient.return_value = instance
 
         result = await search_client.fetch_product_page("https://www.mouser.com/example")
@@ -200,12 +198,10 @@ async def test_fetch_timeout():
 @pytest.mark.asyncio
 async def test_search_empty_results():
     """Test handling of empty search results."""
-    mock_resp = _mock_response("search_empty.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_empty.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("nonexistent_part_xyz", "mouser.com")
@@ -216,24 +212,17 @@ async def test_search_empty_results():
 @pytest.mark.asyncio
 async def test_search_invalid_json():
     """Test handling of invalid JSON in LLM response."""
-    bad_response = httpx.Response(
-        status_code=200,
-        json={
-            "choices": [
-                {
-                    "message": {
-                        "content": "This is not valid JSON at all"
-                    }
-                }
-            ]
-        },
-        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
-    )
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = "This is not valid JSON at all"
+
+    bad_response = MagicMock()
+    bad_response.content = [text_block]
+    bad_response.stop_reason = "end_turn"
+
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = bad_response
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=bad_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("STM32F103C8T6", "mouser.com")
@@ -245,24 +234,17 @@ async def test_search_invalid_json():
 @pytest.mark.asyncio
 async def test_fetch_invalid_json():
     """Test handling of invalid JSON in fetch_product_page response."""
-    bad_response = httpx.Response(
-        status_code=200,
-        json={
-            "choices": [
-                {
-                    "message": {
-                        "content": "I cannot access that URL"
-                    }
-                }
-            ]
-        },
-        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
-    )
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = "I cannot access that URL"
+
+    bad_response = MagicMock()
+    bad_response.content = [text_block]
+    bad_response.stop_reason = "end_turn"
+
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = bad_response
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=bad_response)
         MockClient.return_value = instance
 
         result = await search_client.fetch_product_page("https://www.mouser.com/example")
@@ -279,12 +261,10 @@ async def test_fetch_invalid_json():
 @pytest.mark.asyncio
 async def test_mpn_confidence_always_searched():
     """Verify that mpn_confidence is always 'searched' in all results."""
-    mock_resp = _mock_response("search_digikey_capacitor.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_digikey_capacitor.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("100nF capacitor", "digikey.com")
@@ -298,12 +278,10 @@ async def test_mpn_confidence_always_searched():
 @pytest.mark.asyncio
 async def test_search_result_structure():
     """Verify the structure of search results."""
-    mock_resp = _mock_response("search_mouser_stm32.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    mock_response = _mock_anthropic_response("search_mouser_stm32.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("STM32F103C8T6", "mouser.com")
@@ -317,26 +295,23 @@ async def test_search_result_structure():
 @pytest.mark.asyncio
 async def test_web_search_fallback():
     """Test that if web_search tool is rejected (400), falls back to no-tool call."""
-    # First call raises 400 (web_search not supported), second call succeeds
-    error_response = httpx.Response(
-        status_code=400,
-        json={"error": "web_search tool not supported"},
-        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
-    )
-    success_response = _mock_response("search_mouser_stm32.json")
+    import anthropic as anthropic_mod
 
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+    success_response = _mock_anthropic_response("search_mouser_stm32.json")
+
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.side_effect = [
-            httpx.HTTPStatusError(
-                "Bad Request",
-                request=error_response.request,
-                response=error_response,
-            ),
-            success_response,
-        ]
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        # First call raises BadRequestError, second succeeds
+        instance.messages.create = AsyncMock(
+            side_effect=[
+                anthropic_mod.BadRequestError(
+                    message="Bad request",
+                    response=MagicMock(status_code=400),
+                    body={"error": {"message": "tool not supported"}},
+                ),
+                success_response,
+            ]
+        )
         MockClient.return_value = instance
 
         result = await search_client.search_distributor("STM32F103C8T6", "mouser.com")
@@ -369,69 +344,46 @@ def test_parse_json_with_whitespace():
 
 
 # ---------------------------------------------------------------------------
-# OpenAI API integration tests
+# Anthropic API integration tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_uses_openai_api_endpoint():
-    """Verify that requests are sent to OpenAI API directly, not LiteLLM."""
-    mock_resp = _mock_response("search_mouser_stm32.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
+async def test_uses_anthropic_api():
+    """Verify that requests use the Anthropic SDK."""
+    mock_response = _mock_anthropic_response("search_mouser_stm32.json")
+    with patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         await search_client.search_distributor("STM32F103C8T6", "mouser.com")
 
-        # Verify the URL points to OpenAI, not LiteLLM
-        call_args = instance.post.call_args
-        assert call_args[0][0] == "https://api.openai.com/v1/chat/completions"
+        instance.messages.create.assert_called_once()
+        call_kwargs = instance.messages.create.call_args.kwargs
+        assert "tools" in call_kwargs
+        assert call_kwargs["tools"][0]["type"] == "web_search_20250305"
 
 
 @pytest.mark.asyncio
-async def test_sends_openai_auth_header():
-    """Verify that the Authorization header uses OPENAI_API_KEY."""
-    mock_resp = _mock_response("search_mouser_stm32.json")
-    test_api_key = "sk-test-key-12345"
-    with patch("search_client.OPENAI_API_KEY", test_api_key), \
-         patch("search_client.httpx.AsyncClient") as MockClient:
+async def test_uses_anthropic_api_key():
+    """Verify that ANTHROPIC_API_KEY is used."""
+    test_api_key = "sk-ant-test-12345"
+    mock_response = _mock_anthropic_response("search_mouser_stm32.json")
+    with patch("search_client.ANTHROPIC_API_KEY", test_api_key), \
+         patch("search_client.anthropic.AsyncAnthropic") as MockClient:
         instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.messages.create = AsyncMock(return_value=mock_response)
         MockClient.return_value = instance
 
         await search_client.search_distributor("STM32F103C8T6", "mouser.com")
 
-        call_args = instance.post.call_args
-        headers = call_args[1]["headers"]
-        assert headers["Authorization"] == f"Bearer {test_api_key}"
-        assert headers["Content-Type"] == "application/json"
+        MockClient.assert_called_once()
+        call_kwargs = MockClient.call_args
+        assert call_kwargs.kwargs.get("api_key") == test_api_key
 
 
-@pytest.mark.asyncio
-async def test_uses_web_search_preview_tool():
-    """Verify that the web_search_preview tool type is used instead of web_search."""
-    mock_resp = _mock_response("search_mouser_stm32.json")
-    with patch("search_client.httpx.AsyncClient") as MockClient:
-        instance = AsyncMock()
-        instance.post.return_value = mock_resp
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = instance
-
-        await search_client.search_distributor("STM32F103C8T6", "mouser.com")
-
-        call_args = instance.post.call_args
-        payload = call_args[1]["json"] if "json" in call_args[1] else call_args[0][1]
-        tools = payload.get("tools", [])
-        assert len(tools) == 1
-        assert tools[0]["type"] == "web_search_preview"
-
-
-def test_no_litellm_references():
-    """Verify that search_client no longer references LITELLM_BASE_URL."""
-    assert not hasattr(search_client, "LITELLM_BASE_URL")
+def test_no_openai_references():
+    """Verify that search_client no longer references OpenAI."""
+    assert not hasattr(search_client, "OPENAI_API_KEY")
+    assert not hasattr(search_client, "OPENAI_BASE_URL")

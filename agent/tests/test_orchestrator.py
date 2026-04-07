@@ -88,7 +88,7 @@ async def test_phase2_analyze_schematic(mock_llm, mock_router, mock_state_mgr, m
     mock_llm.analyze_schematic.assert_called_once()
     call_args = mock_llm.analyze_schematic.call_args
     # First positional arg is system prompt, second is user text, third is image URLs
-    assert "data:image/png;base64,img_b64" in call_args[0][2]
+    assert "data:image/jpeg;base64,img_b64" in call_args[0][2]
 
 
 @pytest.mark.asyncio

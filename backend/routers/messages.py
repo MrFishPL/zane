@@ -6,7 +6,6 @@ import asyncio
 import json
 import os
 
-import httpx
 import structlog
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -116,48 +115,37 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
 
 
 async def _generate_title(conversation_id: str, first_message: str) -> None:
-    """Generate a conversation title using OpenAI directly in the background."""
-    api_key = os.environ.get("OPENAI_API_KEY")
+    """Generate a conversation title using Anthropic API in the background."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Generate a short title (max 6 words) for this conversation. "
-                                "Return only the title, no quotes."
-                            ),
-                        },
-                        {"role": "user", "content": first_message[:500]},
-                    ],
-                    "max_tokens": 20,
-                },
-            )
-            data = response.json()
-            title = data["choices"][0]["message"]["content"].strip().strip('"')
-            if title:
-                supabase_client.update_conversation(conversation_id, title)
-                log.info(
-                    "messages.title.generated",
-                    conversation_id=conversation_id,
-                    title=title,
-                )
-    except Exception as exc:
-        log.warning(
-            "messages.title.generation_failed",
-            conversation_id=conversation_id,
-            error=str(exc),
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+        response = await client.messages.create(
+            model=model,
+            max_tokens=30,
+            system="Generate a short title (max 6 words) for this conversation. Return only the title, no quotes.",
+            messages=[
+                {"role": "user", "content": first_message[:500]},
+            ],
         )
+        title = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                title = block.text.strip().strip('"')
+                break
+        if title:
+            supabase_client.update_conversation(conversation_id, title)
+            log.info(
+                "messages.title.generated",
+                conversation_id=conversation_id,
+                title=title,
+            )
+    except Exception:
+        log.warning("messages.title.generation_failed", conversation_id=conversation_id)
 
 
 async def _listen_for_result(task_id: str, conversation_id: str) -> None:
