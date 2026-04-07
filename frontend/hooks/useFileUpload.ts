@@ -76,25 +76,27 @@ export function useFileUpload() {
           );
         }, 200);
 
-        const result: UploadResult = await apiUpload(
-          file,
-          conversationId
-        );
+        try {
+          const result: UploadResult = await apiUpload(
+            file,
+            conversationId
+          );
 
-        clearInterval(progressTimer);
-
-        setUploads((prev) =>
-          prev.map((u) =>
-            u.id === id
-              ? {
-                  ...u,
-                  progress: 100,
-                  path: result.path,
-                  uploadId: result.upload_id,
-                }
-              : u
-          )
-        );
+          setUploads((prev) =>
+            prev.map((u) =>
+              u.id === id
+                ? {
+                    ...u,
+                    progress: 100,
+                    path: result.path,
+                    uploadId: result.upload_id,
+                  }
+                : u
+            )
+          );
+        } finally {
+          clearInterval(progressTimer);
+        }
       } catch (err) {
         setUploads((prev) =>
           prev.map((u) =>

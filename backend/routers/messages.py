@@ -5,19 +5,19 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 
 import structlog
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from services import supabase_client, minio_client, task_manager
+from services import supabase_client, minio_client, task_manager, redis_client
+from config import DEFAULT_USER_ID
 
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/api/conversations", tags=["messages"])
-
-DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class SendMessageRequest(BaseModel):
@@ -146,7 +146,6 @@ async def _generate_title(conversation_id: str, first_message: str) -> None:
             supabase_client.update_conversation(conversation_id, title)
             # Push title update via Redis pub/sub so the frontend gets it in real-time
             try:
-                from services import redis_client
                 rc = redis_client.get_client()
                 await rc.publish(
                     f"agent:status:{conversation_id}",
@@ -165,13 +164,9 @@ async def _generate_title(conversation_id: str, first_message: str) -> None:
 
 async def _listen_for_result(task_id: str, conversation_id: str) -> None:
     """Background listener: persist agent result even without WebSocket."""
-    import json as _json
-    from services import redis_client as _redis
-
     try:
-        pubsub = await _redis.subscribe_status(conversation_id, callback=None)
+        pubsub = await redis_client.subscribe_status(conversation_id)
         timeout = 600  # 10 min max wait
-        import time
         start = time.monotonic()
 
         while time.monotonic() - start < timeout:
@@ -180,7 +175,7 @@ async def _listen_for_result(task_id: str, conversation_id: str) -> None:
                 continue
 
             try:
-                data = _json.loads(message["data"])
+                data = json.loads(message["data"])
             except (ValueError, TypeError):
                 continue
 

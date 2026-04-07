@@ -1,5 +1,7 @@
 """MCP server for TME electronic component search."""
 
+import asyncio as _asyncio
+import atexit
 import os
 import time
 from typing import Any
@@ -27,6 +29,20 @@ client = TMEClient(
     token=os.environ.get("TME_APP_TOKEN", ""),
     app_secret=os.environ.get("TME_APP_SECRET", ""),
 )
+
+
+def _shutdown():
+    try:
+        loop = _asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(client.close())
+        else:
+            loop.run_until_complete(client.close())
+    except Exception:
+        pass
+
+
+atexit.register(_shutdown)
 
 
 def _log_tool_call(

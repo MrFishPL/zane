@@ -36,6 +36,8 @@ export default function Home() {
   // Conversations
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const activeIdRef = useRef(activeId);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentStatus, setAgentStatus] = useState<AgentStatus>(IDLE_STATUS);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -118,7 +120,7 @@ export default function Home() {
           console.error("Failed to load conversation:", err);
         });
     },
-    [conversations]
+    []
   );
 
   useEffect(() => {
@@ -205,12 +207,9 @@ export default function Home() {
           getConversation(resultConvId)
             .then((detail) => {
               // Only update messages if we're still on the same conversation
-              setActiveId((currentId) => {
-                if (currentId === resultConvId) {
-                  setMessages(detail.messages || []);
-                }
-                return currentId;
-              });
+              if (activeIdRef.current === resultConvId) {
+                setMessages(detail.messages || []);
+              }
             })
             .catch(() => {});
         }

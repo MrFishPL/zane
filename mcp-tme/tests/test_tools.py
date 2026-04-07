@@ -1,7 +1,7 @@
 """Tests for TME client and MCP tools."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -97,14 +97,8 @@ class TestTMEClient:
             else:
                 return _mock_response(200, prices_response)
 
-        with patch("tme_client.httpx.AsyncClient") as mock_http:
-            mock_instance = AsyncMock()
-            mock_instance.post = mock_post
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_http.return_value = mock_instance
-
-            result = await client.search_parts("10k resistor 0603")
+        client._http.post = mock_post
+        result = await client.search_parts("10k resistor 0603")
 
         assert result["hits"] == 245
         assert len(result["results"]) == 2
@@ -120,14 +114,8 @@ class TestTMEClient:
         async def mock_post(url, **kwargs):
             return _mock_response(200, empty_search_response)
 
-        with patch("tme_client.httpx.AsyncClient") as mock_http:
-            mock_instance = AsyncMock()
-            mock_instance.post = mock_post
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_http.return_value = mock_instance
-
-            result = await client.search_parts("nonexistent part xyz")
+        client._http.post = mock_post
+        result = await client.search_parts("nonexistent part xyz")
 
         assert result["hits"] == 0
         assert result["results"] == []
@@ -142,14 +130,8 @@ class TestTMEClient:
             else:
                 return _mock_response(200, prices_response)
 
-        with patch("tme_client.httpx.AsyncClient") as mock_http:
-            mock_instance = AsyncMock()
-            mock_instance.post = mock_post
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_http.return_value = mock_instance
-
-            result = await client.search_mpn("RC0603FR-0710KL")
+        client._http.post = mock_post
+        result = await client.search_mpn("RC0603FR-0710KL")
 
         assert result["hits"] > 0
         assert len(result["results"]) > 0
@@ -163,15 +145,9 @@ class TestTMEClient:
             resp.headers = {"Retry-After": "5"}
             return resp
 
-        with patch("tme_client.httpx.AsyncClient") as mock_http:
-            mock_instance = AsyncMock()
-            mock_instance.post = mock_post
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_http.return_value = mock_instance
-
-            with pytest.raises(RuntimeError, match="rate limit"):
-                await client.search_parts("resistor")
+        client._http.post = mock_post
+        with pytest.raises(RuntimeError, match="rate limit"):
+            await client.search_parts("resistor")
 
     @pytest.mark.asyncio
     async def test_api_error_status(self, env_vars):
@@ -182,15 +158,9 @@ class TestTMEClient:
         async def mock_post(url, **kwargs):
             return _mock_response(200, error_response)
 
-        with patch("tme_client.httpx.AsyncClient") as mock_http:
-            mock_instance = AsyncMock()
-            mock_instance.post = mock_post
-            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_http.return_value = mock_instance
-
-            with pytest.raises(RuntimeError, match="E_AUTHENTICATION_FAILED"):
-                await client.search_parts("resistor")
+        client._http.post = mock_post
+        with pytest.raises(RuntimeError, match="E_AUTHENTICATION_FAILED"):
+            await client.search_parts("resistor")
 
 
 class TestCompression:

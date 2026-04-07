@@ -89,7 +89,7 @@ async def generate_csv(
         csv_bytes = csv_content.encode("utf-8")
 
         minio = _get_minio()
-        object_path = f"exports/{user_id}/{conversation_id}/bom_{_today_iso()}.csv"
+        object_path = f"{user_id}/{conversation_id}/bom_{_today_iso()}.csv"
         uri = minio.upload_file("exports", object_path, csv_bytes, content_type="text/csv")
 
         duration_ms = round((time.monotonic() - start) * 1000)
@@ -123,7 +123,7 @@ async def generate_kicad_library(
         zip_bytes = kicad_generator.generate_library(components)
 
         minio = _get_minio()
-        object_path = f"exports/{user_id}/{conversation_id}/kicad_library_{_today_iso()}.zip"
+        object_path = f"{user_id}/{conversation_id}/kicad_library_{_today_iso()}.zip"
         uri = minio.upload_file(
             "exports", object_path, zip_bytes, content_type="application/zip"
         )
@@ -159,7 +159,7 @@ async def generate_altium_library(
         zip_bytes = altium_generator.generate_library(components)
 
         minio = _get_minio()
-        object_path = f"exports/{user_id}/{conversation_id}/altium_library_{_today_iso()}.zip"
+        object_path = f"{user_id}/{conversation_id}/altium_library_{_today_iso()}.zip"
         uri = minio.upload_file(
             "exports", object_path, zip_bytes, content_type="application/zip"
         )
