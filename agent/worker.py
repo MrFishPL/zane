@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import traceback
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -13,6 +14,7 @@ import structlog
 from llm_client import LLMClient
 from mcp_router import MCPRouter
 from models import AgentResult, OrchestratorState
+from orchestrator import Orchestrator
 from state import StateManager
 
 log = structlog.get_logger()
@@ -70,10 +72,11 @@ class AgentWorker:
                 if result is None:
                     continue
 
-                raw = result.decode() if isinstance(result, bytes) else result
+                raw_bytes = result  # keep bytes for lrem
+                raw = raw_bytes.decode() if isinstance(raw_bytes, bytes) else raw_bytes
                 task = json.loads(raw)
                 await self._semaphore.acquire()
-                t = asyncio.create_task(self._process_task_wrapper(task, raw))
+                t = asyncio.create_task(self._process_task_wrapper(task, raw, raw_bytes))
                 t.add_done_callback(lambda _: self._semaphore.release())
         finally:
             decision_task.cancel()
@@ -82,15 +85,14 @@ class AgentWorker:
             except asyncio.CancelledError:
                 pass
 
-    async def _process_task_wrapper(self, task: dict, raw_task: str) -> None:
+    async def _process_task_wrapper(self, task: dict, raw_task: str, raw_task_bytes: bytes) -> None:
         """Wrapper to ensure exceptions don't crash the event loop."""
         try:
-            await self._process_task(task, raw_task)
+            await self._process_task(task, raw_task, raw_task_bytes)
         except Exception as e:
-            import traceback
             log.error("worker.process_task_wrapper_error", error=str(e), tb=traceback.format_exc())
 
-    async def _process_task(self, task: dict, raw_task: str) -> None:
+    async def _process_task(self, task: dict, raw_task: str, raw_task_bytes: bytes) -> None:
         """Process a single task via the Orchestrator."""
         assert self._redis is not None
 
@@ -98,9 +100,6 @@ class AgentWorker:
         conversation_id = task.get("conversation_id", "unknown")
 
         try:
-            # Import here to allow orchestrator to not exist yet at import time
-            from orchestrator import Orchestrator
-
             log.info("worker.processing_task", task_id=task_id,
                      attachments=task.get("attachments", []),
                      message_preview=task.get("message", "")[:200])
@@ -114,31 +113,13 @@ class AgentWorker:
                 attachments=task.get("attachments", []),
                 conversation_history=task.get("conversation_history"),
             )
-
-            if result.status == "decision_required":
-                # Pause: save state, move to paused list
-                state = OrchestratorState(**result.data["state"])
-                await self._state_mgr.pause(state)
-                # Publish only the decisions, not the full state (too large for pub/sub)
-                decision_msg = {
-                    "status": "decision_required",
-                    "task_id": task_id,
-                    "message": result.message,
-                    "decisions": [d.model_dump() for d in result.decisions] if result.decisions else [],
-                }
-                await self._publish(
-                    conversation_id, task_id, "decision_required", decision_msg,
-                )
-                # Move from processing to paused
-                await self._redis.lrem("agent:processing", 1, raw_task)
-                log.info("worker.task_paused", task_id=task_id, num_decisions=len(decision_msg["decisions"]))
-                return
+            # Note: interactive decisions (Phase 5) are not yet implemented;
+            # the orchestrator never returns status="decision_required".
 
             await self._publish(conversation_id, task_id, "result", result.model_dump())
             log.info("worker.task_completed", task_id=task_id, status=result.status)
 
         except Exception as e:
-            import traceback
             log.error("worker.task_error", task_id=task_id, error=str(e)[:500], tb=traceback.format_exc())
             try:
                 await self._publish(
@@ -147,7 +128,7 @@ class AgentWorker:
             except Exception:
                 log.error("worker.publish_error_failed", task_id=task_id)
         finally:
-            await self._redis.lrem("agent:processing", 1, raw_task)
+            await self._redis.lrem("agent:processing", 1, raw_task_bytes)
 
     async def _decision_listener(self, shutdown_event: asyncio.Event) -> None:
         """Background loop: poll paused tasks for user decisions + auto-timeout."""
@@ -208,8 +189,6 @@ class AgentWorker:
                 if not state:
                     log.warning("worker.resume_no_state", task_id=task_id)
                     return
-
-                from orchestrator import Orchestrator
 
                 orch = Orchestrator(
                     self._llm, self._router, self._state_mgr, self._publish
