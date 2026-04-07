@@ -74,12 +74,21 @@ graph TB
     MEXP -->|Write| MO
     MWS -->|web_search| Anthropic
     GF -->|Query| LK
+    FE -.->|logs| LK
+    BE -.->|logs| LK
+    AG -.->|logs| LK
+    MTME -.->|logs| LK
+    MDOC -.->|logs| LK
+    MWS -.->|logs| LK
+    MEXP -.->|logs| LK
 
     style FE fill:#1a1a2e,stroke:#4a9eff
     style BE fill:#1a1a2e,stroke:#4a9eff
     style AG fill:#1a1a2e,stroke:#e74c3c
     style RD fill:#1a1a2e,stroke:#d63031
     style MO fill:#1a1a2e,stroke:#00b894
+    style LK fill:#1a1a2e,stroke:#f39c12
+    style GF fill:#1a1a2e,stroke:#f39c12
 ```
 
 ### Agent workflow

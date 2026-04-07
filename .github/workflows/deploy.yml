@@ -44,14 +44,19 @@ jobs:
             # Write .env from secret
             printf '%s\n' "$DOTENV" > .env
 
-            # Build and deploy
-            docker compose down --remove-orphans
-            docker compose up --build -d
+            # Install Loki Docker logging driver if missing
+            if ! docker plugin ls --format '{{.Name}}' | grep -q loki; then
+              docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions || true
+            fi
+
+            # Build and deploy (with Loki logging overlay)
+            docker compose -f docker-compose.yml -f docker-compose.override.loki.yml down --remove-orphans
+            docker compose -f docker-compose.yml -f docker-compose.override.loki.yml up --build -d
 
             # Wait for health checks
             echo "Waiting for services to start..."
             sleep 15
-            docker compose ps
+            docker compose -f docker-compose.yml -f docker-compose.override.loki.yml ps
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOTENV: ${{ secrets.DOTENV }}
