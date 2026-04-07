@@ -12,7 +12,7 @@ Web application for automated electronic component sourcing. User uploads a sche
 
 - **frontend** (Next.js :3000) — Chat UI with file upload, WebSocket status, BOM rendering
 - **backend** (FastAPI :8000) — REST API, Supabase CRUD, MinIO files, Redis pub/sub → WebSocket
-- **agent** (OpenAI Agents SDK worker) — Picks tasks from Redis queue, orchestrator agent delegates to sub-agents (analysis, sourcing, export), makes interactive decisions via handoffs. Direct OpenAI API (GPT-5.4).
+- **agent** (custom Orchestrator worker) — Picks tasks from Redis queue, runs a 7-phase pipeline (parse → analyze → search → CAD check → assemble BOM → export). Uses LLMClient (direct OpenAI API, GPT-5.4), SearchAgent sub-agent with tool loop, StateManager for Redis pause/resume. Interactive decisions (Phase 5) not yet implemented.
 - **redis** (Redis 7 :6379) — Task queue (`agent:tasks`) + pub/sub (`agent:status:{conv_id}`)
 - **minio** (MinIO :9000/:9001) — Object storage for uploads/temp/exports
 - **mcp-nexar** (:8001) — Nexar/Octopart component search (GraphQL, OAuth2)
