@@ -205,7 +205,6 @@ class TMEClient:
             "description": description,
             "total_avail": total_stock,
             "category": category,
-            "octopart_url": None,
             "tme_url": f"https://www.tme.eu/en/details/{symbol}/" if symbol else None,
             "median_price_1000": None,
             "sellers": sellers,

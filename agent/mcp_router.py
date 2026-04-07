@@ -1,12 +1,10 @@
-"""Routes OpenAI tool calls to the appropriate MCP server.
+"""Routes tool calls to the appropriate MCP server.
 
-Maintains persistent SSE connections to each MCP server and
-dispatches tool invocations by name.
+Dispatches tool invocations by name via SSE or HTTP fallback.
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
 from typing import Any
 
@@ -52,25 +50,12 @@ class MCPRouter:
 
     def __init__(self, server_urls: dict[str, str] | None = None) -> None:
         self._server_urls = server_urls or dict(_DEFAULT_SERVERS)
-        self._sessions: dict[str, tuple[ClientSession, Any]] = {}
-        self._locks: dict[str, asyncio.Lock] = {
-            key: asyncio.Lock() for key in self._server_urls
-        }
         self._http = httpx.AsyncClient(timeout=30.0)
 
     # -- lifecycle --
 
     async def close(self) -> None:
-        """Release all held connections."""
-        for key, (session, _ctx) in list(self._sessions.items()):
-            try:
-                # ClientSession does not expose a close(); its context
-                # manager is handled by the sse_client context.  We just
-                # drop the reference so the GC can collect it.
-                pass
-            except Exception:
-                log.warning("mcp_session_close_error", server=key, exc_info=True)
-        self._sessions.clear()
+        """Release the HTTP client."""
         await self._http.aclose()
 
     # -- public API --

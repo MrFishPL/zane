@@ -104,8 +104,7 @@ class TestSearchResult:
             distributor="Digi-Key",
             distributor_stock=45000,
             distributor_url="https://www.digikey.com/product/123",
-            octopart_url="https://octopart.com/part/456",
-            median_price_1000={"price": 0.003, "currency": "USD"},
+            median_price_1000=0.003,
             constraints_reasoning="Matches 100nF X7R 50V in 0603",
         )
         data = sr.model_dump()

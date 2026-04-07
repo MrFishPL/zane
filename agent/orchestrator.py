@@ -315,7 +315,6 @@ class Orchestrator:
                             distributor=best_seller,
                             distributor_stock=best_offer.get("stock") if best_offer else None,
                             distributor_url=best_offer.get("url") if best_offer else None,
-                            octopart_url=part.get("octopart_url"),
                             median_price_1000=part.get("median_price_1000"),
                         )
             except Exception as e:
@@ -423,7 +422,6 @@ class Orchestrator:
                 "total_stock": entry.search_result.total_stock,
                 "distributor": entry.search_result.distributor,
                 "distributor_url": entry.search_result.distributor_url,
-                "octopart_url": entry.search_result.octopart_url,
                 "quantity_per_unit": entry.component.quantity_per_unit,
                 "quantity_total": entry.quantity_total,
                 "status": entry.search_result.status,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -19,7 +21,7 @@ class ComponentSpec(BaseModel):
 
 class SearchResult(BaseModel):
     """Result from a component search sub-agent."""
-    status: str  # "found", "not_found", "error"
+    status: Literal["found", "not_found", "error"]
     ref: str
     mpn: str | None = None
     manufacturer: str | None = None
@@ -30,7 +32,6 @@ class SearchResult(BaseModel):
     distributor: str | None = None
     distributor_stock: int | None = None
     distributor_url: str | None = None
-    octopart_url: str | None = None
     median_price_1000: float | None = None
     constraints_reasoning: str | None = None
     reason: str | None = None
@@ -89,7 +90,7 @@ class OrchestratorState(BaseModel):
 
 
 class AgentResult(BaseModel):
-    status: str
+    status: Literal["needs_clarification", "recommendation", "analysis", "decision_required"]
     message: str
     task_id: str | None = None
     data: dict | None = None
