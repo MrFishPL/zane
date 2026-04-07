@@ -115,8 +115,10 @@ class Orchestrator:
             components, priority, production_volume, context,
         )
 
-        # Phase 4 & 5: Skipped — CAD check and interactive decisions disabled for now
-        cad_statuses: list[CADStatus] = []
+        # Phase 4: CAD availability check
+        await self._publish(conversation_id, task_id, "status", "Checking CAD model availability...")
+        found_mpns = [sr.mpn for sr in search_results if sr.is_found and sr.mpn]
+        cad_statuses = await self._phase4_check_cad(found_mpns) if found_mpns else []
 
         # Phase 6: Assemble BOM
         await self._publish(conversation_id, task_id, "status", "Assembling BOM...")

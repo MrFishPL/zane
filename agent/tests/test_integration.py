@@ -152,12 +152,16 @@ def mock_llm() -> MagicMock:
     # Phase 2 -- Orchestrator calls llm.analyze_schematic(...)
     llm.analyze_schematic = AsyncMock(return_value=ANALYSIS_RESULT)
 
-    # Phase 3 -- SearchAgent calls llm.chat.completions.create(...)
+    # Phase 3 -- SearchAgent calls await llm.chat(messages, tools=...)
     # The response has content but no tool_calls, so the agent returns
     # the parsed answer immediately.
     sub_agent_message = MagicMock()
     sub_agent_message.content = SUB_AGENT_ANSWER
     sub_agent_message.tool_calls = None  # no tool calls -> final answer
+    sub_agent_message.model_dump = MagicMock(return_value={
+        "role": "assistant",
+        "content": SUB_AGENT_ANSWER,
+    })
 
     sub_agent_choice = MagicMock()
     sub_agent_choice.message = sub_agent_message
@@ -166,9 +170,7 @@ def mock_llm() -> MagicMock:
     sub_agent_response = MagicMock()
     sub_agent_response.choices = [sub_agent_choice]
 
-    llm.chat = MagicMock()
-    llm.chat.completions = MagicMock()
-    llm.chat.completions.create = AsyncMock(return_value=sub_agent_response)
+    llm.chat = AsyncMock(return_value=sub_agent_response)
 
     return llm
 
@@ -253,4 +255,4 @@ async def test_full_pipeline_pdf_to_recommendation(
     mock_llm.analyze_schematic.assert_called_once()
 
     # --- Verify Phase 3: sub-agent LLM was called once (direct answer, 1 iteration) ---
-    mock_llm.chat.completions.create.assert_called_once()
+    mock_llm.chat.assert_called_once()
