@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Web application for automated electronic component sourcing. User uploads a schematic (PDF/photo/sketch), AI agent visually analyzes it, identifies components, searches distributor APIs (Nexar/Octopart), and produces a structured BOM with pricing, stock, and downloadable CSV/KiCad/Altium exports.
+Web application for automated electronic component sourcing. User uploads a schematic (PDF/photo/sketch), AI agent visually analyzes it, identifies components, searches TME distributor API, and produces a structured BOM with pricing, stock, and downloadable CSV/KiCad/Altium exports.
 
 ## Architecture
 
@@ -12,22 +12,22 @@ Web application for automated electronic component sourcing. User uploads a sche
 
 - **frontend** (Next.js :3000) — Chat UI with file upload, WebSocket status, BOM rendering
 - **backend** (FastAPI :8000) — REST API, Supabase CRUD, MinIO files, Redis pub/sub → WebSocket
-- **agent** (custom Orchestrator worker) — Picks tasks from Redis queue, runs a 7-phase pipeline (parse → analyze → search → CAD check → assemble BOM → export). Uses LLMClient (Anthropic API, Claude), SearchAgent sub-agent with tool loop, StateManager for Redis pause/resume. Interactive decisions (Phase 5) not yet implemented.
+- **agent** (custom Orchestrator worker) — Picks tasks from Redis queue, runs a 6-phase pipeline (parse → analyze → search → assemble BOM → export). Uses LLMClient (Anthropic API, Claude), SearchAgent sub-agent with tool loop, StateManager for Redis pause/resume.
 - **redis** (Redis 7 :6379) — Task queue (`agent:tasks`) + pub/sub (`agent:status:{conv_id}`)
 - **minio** (MinIO :9000/:9001) — Object storage for uploads/temp/exports
-- **mcp-nexar** (:8001) — Nexar/Octopart component search (GraphQL, OAuth2)
+- **mcp-tme** (:8001) — TME electronic component search (REST, HMAC-SHA1)
 - **mcp-documents** (:8003) — PDF rendering, image processing, base64 retrieval (MinIO)
 - **mcp-websearch** (:8004) — Web search fallback (Anthropic API with web_search tool)
 - **mcp-export** (:8005) — CSV/KiCad/Altium library generation (MinIO)
 - **loki** (:3100) + **grafana** (:3001) — Observability
 
-External: Supabase (PostgreSQL), Anthropic API (Claude), Nexar API
+External: Supabase (PostgreSQL), Anthropic API (Claude), TME API
 
 ## Environment
 
 All credentials in `.env` (gitignored). See `.env.example` for template.
 
-Key vars: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `NEXAR_CLIENT_ID`, `NEXAR_CLIENT_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `REDIS_URL`, `MINIO_ENDPOINT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
+Key vars: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `TME_APP_TOKEN`, `TME_APP_SECRET`, `TME_LANGUAGE`, `TME_COUNTRY`, `SUPABASE_URL`, `SUPABASE_KEY`, `REDIS_URL`, `MINIO_ENDPOINT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
 
 ## Commands
 
@@ -43,12 +43,14 @@ cd <service> && pip install -r requirements.txt && pytest
 cd frontend && npm install && npm test && npm run dev
 ```
 
-## Nexar API Notes
+## TME API Notes
 
-- Authentication: OAuth2 client credentials → bearer token → `Authorization: Bearer <token>`
-- Token endpoint: POST `https://identity.nexar.com/connect/token` with `grant_type=client_credentials`
-- GraphQL endpoint: `https://api.nexar.com/graphql`
-- Primary query: `supSearch` for component search
+- Authentication: HMAC-SHA1 signature (OAuth 1.0a style) with app token + app secret
+- Base URL: `https://api.tme.eu/`
+- All endpoints use POST with `application/x-www-form-urlencoded`
+- Key endpoints: `Products/Search`, `Products/GetProducts`, `Products/GetPricesAndStocks`
+- Rate limits: 10 req/s standard, 2 req/s for price/stock endpoints
+- Max 50 symbols per batch request
 
 ## Key Patterns
 

@@ -1,0 +1,50 @@
+{
+  "Status": "OK",
+  "Data": {
+    "ProductList": [
+      {
+        "Symbol": "RC0603FR-0710KL",
+        "CustomerSymbol": "",
+        "OriginalSymbol": "RC0603FR-0710KL",
+        "EAN": "4710350451004",
+        "Producer": "YAGEO",
+        "Description": "Resistor: thick film; 10kΩ; 0603; 0.1W; ±1%; -55÷155°C",
+        "CategoryId": 100328,
+        "Category": "SMD Resistors",
+        "Photo": "https://ce8dc832c.cloudimg.io/v7/_tme_/photo_small.jpg",
+        "Thumbnail": "https://ce8dc832c.cloudimg.io/v7/_tme_/thumbnail.jpg",
+        "Weight": 0.05,
+        "WeightUnit": "g",
+        "SuppliedAmount": 0,
+        "MinAmount": 10,
+        "Multiplies": 10,
+        "Unit": "pcs",
+        "ProductInformationPage": "https://www.tme.eu/en/details/rc0603fr-0710kl/smd-resistors/yageo/",
+        "ProductStatusList": ["NEW_PRODUCT"]
+      },
+      {
+        "Symbol": "CRCW060310K0FKEA",
+        "CustomerSymbol": "",
+        "OriginalSymbol": "CRCW060310K0FKEA",
+        "EAN": "4710350451005",
+        "Producer": "VISHAY",
+        "Description": "Resistor: thick film; 10kΩ; 0603; 0.1W; ±1%",
+        "CategoryId": 100328,
+        "Category": "SMD Resistors",
+        "Photo": "https://ce8dc832c.cloudimg.io/v7/_tme_/photo2.jpg",
+        "Thumbnail": "https://ce8dc832c.cloudimg.io/v7/_tme_/thumbnail2.jpg",
+        "Weight": 0.05,
+        "WeightUnit": "g",
+        "SuppliedAmount": 0,
+        "MinAmount": 10,
+        "Multiplies": 10,
+        "Unit": "pcs",
+        "ProductInformationPage": "https://www.tme.eu/en/details/crcw060310k0fkea/smd-resistors/vishay/",
+        "ProductStatusList": []
+      }
+    ],
+    "Amount": 245,
+    "PageNumber": 1,
+    "CategoryList": {}
+  }
+}

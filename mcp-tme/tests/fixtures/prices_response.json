@@ -1,0 +1,33 @@
+{
+  "Status": "OK",
+  "Data": {
+    "Language": "EN",
+    "Currency": "PLN",
+    "PriceType": "NET",
+    "ProductList": [
+      {
+        "Symbol": "RC0603FR-0710KL",
+        "Unit": "pcs",
+        "VatRate": 23,
+        "VatType": "VAT",
+        "Amount": 5000000,
+        "PriceList": [
+          {"Amount": 10, "PriceValue": 0.04, "PriceBase": 0.04, "Special": false},
+          {"Amount": 100, "PriceValue": 0.02, "PriceBase": 0.04, "Special": false},
+          {"Amount": 1000, "PriceValue": 0.01, "PriceBase": 0.04, "Special": false}
+        ]
+      },
+      {
+        "Symbol": "CRCW060310K0FKEA",
+        "Unit": "pcs",
+        "VatRate": 23,
+        "VatType": "VAT",
+        "Amount": 1200000,
+        "PriceList": [
+          {"Amount": 10, "PriceValue": 0.05, "PriceBase": 0.05, "Special": false},
+          {"Amount": 100, "PriceValue": 0.03, "PriceBase": 0.05, "Special": false}
+        ]
+      }
+    ]
+  }
+}

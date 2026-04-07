@@ -1,7 +1,7 @@
 """Focused search sub-agent with tool loop.
 
 Dispatched by the orchestrator (one per component) to find a specific
-electronic part.  Uses a subset of MCP tools (Nexar search + web
+electronic part.  Uses a subset of MCP tools (TME search + web
 search fallback) and iterates until it finds a match or exhausts
 the iteration budget.
 """
@@ -26,7 +26,7 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_parts",
-            "description": "Search for electronic components on Nexar/Octopart by keyword.",
+            "description": "Search for electronic components on TME by keyword.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -43,13 +43,13 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_mpn",
-            "description": "Search for a specific manufacturer part number (MPN) on Nexar/Octopart.",
+            "description": "Search for a specific manufacturer part number (MPN) or TME symbol.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mpn": {
                         "type": "string",
-                        "description": "Manufacturer part number to search",
+                        "description": "Manufacturer part number or TME symbol to search",
                     },
                 },
                 "required": ["mpn"],
@@ -60,7 +60,7 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_distributor",
-            "description": "Search for a component on distributor websites via web search. Fallback when Nexar returns no results.",
+            "description": "Search for a component on distributor websites via web search. Fallback when TME returns no results.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -99,12 +99,12 @@ SEARCH_TOOLS: list[dict[str, Any]] = [
 _SEARCH_SYSTEM_PROMPT = """\
 You are a component search agent. Find a specific electronic component and return sourcing details.
 
-Use the available tools to search on Nexar/Octopart and distributor websites.
+Use the available tools to search on TME and distributor websites.
 
 ## Search strategy
 1. Start with the most specific query (exact value + package if known).
 2. If no results, broaden progressively (drop package, use synonyms).
-3. If Nexar fails after 3+ attempts, use search_distributor as fallback.
+3. If TME fails after 3+ attempts, use search_distributor as fallback.
 4. If a specific MPN is mentioned, try search_mpn first.
 
 ## Rules

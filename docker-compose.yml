@@ -72,15 +72,15 @@ services:
         condition: service_healthy
 
   # --- MCP Servers ---
-  mcp-nexar:
-    build: ./mcp-nexar
+  mcp-tme:
+    build: ./mcp-tme
     ports:
       - "8001:8001"
     environment:
-      NEXAR_CLIENT_ID: ${NEXAR_CLIENT_ID}
-      NEXAR_CLIENT_SECRET: ${NEXAR_CLIENT_SECRET}
-      NEXAR_COUNTRY: ${NEXAR_COUNTRY}
-      NEXAR_CURRENCY: ${NEXAR_CURRENCY}
+      TME_APP_TOKEN: ${TME_APP_TOKEN}
+      TME_APP_SECRET: ${TME_APP_SECRET}
+      TME_LANGUAGE: ${TME_LANGUAGE:-PL}
+      TME_COUNTRY: ${TME_COUNTRY:-PL}
     networks:
       - app-network
     healthcheck:
@@ -176,7 +176,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      mcp-nexar:
+      mcp-tme:
         condition: service_healthy
       mcp-documents:
         condition: service_healthy

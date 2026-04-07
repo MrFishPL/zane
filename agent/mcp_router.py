@@ -25,10 +25,10 @@ _TOOL_SERVER_MAP: dict[str, str] = {
     "get_image_base64": "mcp-documents",
     "crop_zoom_image": "mcp-documents",
     "extract_text": "mcp-documents",
-    # mcp-nexar
-    "search_parts": "mcp-nexar",
-    "search_mpn": "mcp-nexar",
-    "multi_match": "mcp-nexar",
+    # mcp-tme
+    "search_parts": "mcp-tme",
+    "search_mpn": "mcp-tme",
+    "multi_match": "mcp-tme",
     # mcp-websearch
     "search_distributor": "mcp-websearch",
     "fetch_product_page": "mcp-websearch",
@@ -40,7 +40,7 @@ _TOOL_SERVER_MAP: dict[str, str] = {
 
 _DEFAULT_SERVERS: dict[str, str] = {
     "mcp-documents": "http://mcp-documents:8003",
-    "mcp-nexar": "http://mcp-nexar:8001",
+    "mcp-tme": "http://mcp-tme:8001",
     "mcp-websearch": "http://mcp-websearch:8004",
     "mcp-export": "http://mcp-export:8005",
 }

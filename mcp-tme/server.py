@@ -1,4 +1,4 @@
-"""MCP server for Nexar/Octopart electronic component search."""
+"""MCP server for TME electronic component search."""
 
 import os
 import time
@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from nexar_client import NexarClient
+from tme_client import TMEClient
 
 structlog.configure(
     processors=[
@@ -21,11 +21,11 @@ structlog.configure(
 
 log = structlog.get_logger()
 
-mcp = FastMCP("mcp-nexar", host="0.0.0.0", port=8001)
+mcp = FastMCP("mcp-tme", host="0.0.0.0", port=8001)
 
-client = NexarClient(
-    client_id=os.environ.get("NEXAR_CLIENT_ID", ""),
-    client_secret=os.environ.get("NEXAR_CLIENT_SECRET", ""),
+client = TMEClient(
+    token=os.environ.get("TME_APP_TOKEN", ""),
+    app_secret=os.environ.get("TME_APP_SECRET", ""),
 )
 
 
@@ -53,7 +53,7 @@ def _log_tool_call(
 
 @mcp.tool()
 async def search_parts(query: str) -> dict:
-    """Search for electronic components by description (e.g. '3 ohm resistor 0603'). Returns top 5 results with pricing, stock, and distributor links."""
+    """Search for electronic components by description (e.g. '100nF 0402 capacitor'). Returns top 5 results with pricing, stock, and TME links."""
     start = time.monotonic()
     try:
         result = await client.search_parts(query)
@@ -68,7 +68,7 @@ async def search_parts(query: str) -> dict:
 
 @mcp.tool()
 async def search_mpn(mpn: str) -> dict:
-    """Search for a specific component by Manufacturer Part Number. Returns detailed pricing and stock."""
+    """Search for a specific component by Manufacturer Part Number or TME symbol. Returns detailed pricing and stock."""
     start = time.monotonic()
     try:
         result = await client.search_mpn(mpn)
@@ -100,9 +100,9 @@ async def multi_match(mpns: list[str]) -> dict:
 # Health endpoint
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok", "service": "mcp-nexar"})
+    return JSONResponse({"status": "ok", "service": "mcp-tme"})
 
 
 if __name__ == "__main__":
-    log.info("mcp_nexar.starting", port=8001)
+    log.info("mcp_tme.starting", port=8001)
     mcp.run(transport="sse")

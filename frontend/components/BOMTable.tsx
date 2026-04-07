@@ -130,7 +130,7 @@ function ComponentRow({ comp, currency }: { comp: Component; currency: string })
         <td className="px-3 py-2.5 text-sm">
           {comp.mpn ? (
             <a
-              href={comp.distributor_url || `https://octopart.com/search?q=${encodeURIComponent(comp.mpn)}`}
+              href={comp.distributor_url || `https://www.tme.eu/en/katalog/?search=${encodeURIComponent(comp.mpn)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:text-accent-hover underline decoration-accent/30 hover:decoration-accent transition-colors font-mono"

@@ -60,7 +60,7 @@ function RecommendationView({ data, messageTxt }: { data: JsonData; messageTxt: 
     stock: c.stock ?? c.total_stock ?? 0,
     lifecycle: c.lifecycle || "unknown",
     distributor: c.distributor || "",
-    distributor_url: c.distributor_url || (c.octopart_url ? c.octopart_url : ""),
+    distributor_url: c.distributor_url || c.tme_url || "",
     datasheet_url: c.datasheet_url || "",
     mpn_confidence: c.mpn_confidence || "verified",
     verified: c.verified ?? true,

@@ -231,7 +231,7 @@ async def test_tool_error_fed_back(
 ) -> None:
     """When a tool call raises an exception, the error is reported back to the LLM."""
     mock_mcp_router.call_tool = AsyncMock(
-        side_effect=ConnectionError("mcp-nexar down")
+        side_effect=ConnectionError("mcp-tme down")
     )
 
     tc = make_tool_call("tc-err", "search_parts", {"query": "fail"})
@@ -263,7 +263,7 @@ async def test_tool_error_fed_back(
     ]
     assert len(tool_result_msgs) == 1
     tool_result_content = tool_result_msgs[0]["content"][0]["content"]
-    assert "mcp-nexar down" in tool_result_content
+    assert "mcp-tme down" in tool_result_content
 
 
 # ---------------------------------------------------------------------------
