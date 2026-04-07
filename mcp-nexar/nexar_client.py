@@ -1,5 +1,6 @@
 """GraphQL client for the Nexar (Octopart) API."""
 
+import itertools
 import os
 import time
 from typing import Any
@@ -283,7 +284,16 @@ class NexarClient:
 
             multi_results = data.get("supMultiMatch") or []
             results: dict[str, Any] = {}
-            for mpn, match in zip(mpns, multi_results):
+            if len(multi_results) != len(mpns):
+                log.warning(
+                    "nexar_client.multi_match.length_mismatch",
+                    expected=len(mpns),
+                    got=len(multi_results),
+                )
+            for mpn, match in itertools.zip_longest(mpns, multi_results, fillvalue={}):
+                if match is None:
+                    results[mpn] = {"hits": 0, "results": []}
+                    continue
                 parts_raw = match.get("parts") or []
                 parts = [self._compress_part(p) for p in parts_raw if p]
                 results[mpn] = {
