@@ -1,0 +1,51 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            set -e
+
+            APP_DIR="/opt/zane"
+
+            # First run: install Docker if missing
+            if ! command -v docker &> /dev/null; then
+              curl -fsSL https://get.docker.com | sh
+            fi
+
+            # First run: clone repo
+            if [ ! -d "$APP_DIR" ]; then
+              git clone https://github.com/MrFishPL/zane.git "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            # Pull latest code
+            git fetch origin master
+            git reset --hard origin/master
+
+            # Write .env from secret
+            cat > .env << 'ENVEOF'
+            ${{ secrets.DOTENV }}
+            ENVEOF
+
+            # Build and deploy
+            docker compose down --remove-orphans
+            docker compose up --build -d
+
+            # Wait for health checks
+            echo "Waiting for services to start..."
+            sleep 15
+            docker compose ps
