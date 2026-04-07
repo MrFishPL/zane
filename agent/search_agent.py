@@ -451,7 +451,6 @@ class SearchAgent:
             response = await self._llm.chat(
                 [
                     {"role": "user", "content": reformat_prompt},
-                    {"role": "assistant", "content": "{"},
                 ],
                 max_tokens=1024,
             )
@@ -460,7 +459,7 @@ class SearchAgent:
                 if hasattr(block, "text"):
                     text = block.text
                     break
-            data = json.loads("{" + text)
+            data = json.loads(text.strip())
             data.setdefault("ref", ref)
             data.setdefault("status", "not_found")
             return SearchResult.model_validate(data)

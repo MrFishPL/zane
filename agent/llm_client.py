@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 from typing import Any
 
 import structlog
-from anthropic import AsyncAnthropic, APITimeoutError
+from anthropic import AsyncAnthropic, APITimeoutError, RateLimitError, APIStatusError
 
 logger = structlog.get_logger(__name__)
 
@@ -129,6 +130,25 @@ class LLMClient:
                         timeout=timeout_secs,
                     )
                     continue
+                raise
+            except RateLimitError:
+                if attempt < len(timeouts) - 1:
+                    wait = min(2 ** (attempt + 1), 30)
+                    logger.warning(
+                        "rate_limited, retrying",
+                        attempt=attempt,
+                        wait_seconds=wait,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+            except APIStatusError as exc:
+                logger.error(
+                    "api_status_error",
+                    attempt=attempt,
+                    status_code=exc.status_code,
+                    message=str(exc)[:200],
+                )
                 raise
 
         # Should not reach here, but just in case
