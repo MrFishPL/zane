@@ -37,13 +37,13 @@ log = structlog.get_logger()
 # User-facing messages in supported languages
 _MESSAGES = {
     "pl": {
-        "need_schematic": "Potrzebuję schematu (PDF lub obraz) lub opisu potrzebnych komponentów.",
+        "need_schematic": "Potrzebuję schematu (obraz) lub opisu potrzebnych komponentów.",
         "no_components": "Nie udało się zidentyfikować komponentów na schemacie. Czy możesz podać więcej szczegółów?",
         "decisions_needed": "Niektóre komponenty wymagają Twojej decyzji przed finalizacją BOM.",
         "found": "Znaleziono {found}/{total} komponentów dla Twojego BOM.",
     },
     "en": {
-        "need_schematic": "I need a schematic (PDF or image) or a description of the components you need.",
+        "need_schematic": "I need a schematic (image) or a description of the components you need.",
         "no_components": "I couldn't identify any components in the schematic. Could you provide more detail?",
         "decisions_needed": "Some components need your input before I can finalize the BOM.",
         "found": "Found {found}/{total} components for your BOM.",
@@ -184,7 +184,7 @@ class Orchestrator:
     # --- Phase implementations ---
 
     async def _phase1_parse_attachments(self, attachments: list[dict]) -> tuple[list[str], list[str]]:
-        """Phase 1: Render PDFs, extract text, get image base64."""
+        """Phase 1: Get image base64 for each attachment (images only)."""
         images: list[str] = []
         texts: list[str] = []
 
@@ -197,47 +197,10 @@ class Orchestrator:
             # Infer type from file extension if not provided
             if not att_type:
                 lower_path = path.lower()
-                if lower_path.endswith(".pdf"):
-                    att_type = "application/pdf"
-                elif any(lower_path.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
+                if any(lower_path.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")):
                     att_type = "image"
 
-            if "pdf" in att_type.lower():
-                try:
-                    render_result = await self._router.call_tool(
-                        "render_pdf_pages", {"pdf_path": path},
-                    )
-                    render_data = _safe_json(render_result)
-                    pages = render_data.get("pages", [])
-
-                    for i, page_info in enumerate(pages):
-                        # page_info is a dict with number, classification, minio_path
-                        page_minio_path = page_info.get("minio_path", page_info) if isinstance(page_info, dict) else page_info
-
-                        try:
-                            text_result = await self._router.call_tool(
-                                "extract_text", {"pdf_path": path, "page_number": i + 1},
-                            )
-                            text_data = _safe_json(text_result)
-                            if text_data.get("text"):
-                                texts.append(text_data["text"])
-                        except Exception as e:
-                            log.warning("phase1.extract_text_error", page=i + 1, error=str(e)[:200])
-
-                        try:
-                            img_result = await self._router.call_tool(
-                                "get_image_base64", {"image_path": page_minio_path},
-                            )
-                            img_data = _safe_json(img_result)
-                            if img_data.get("base64"):
-                                images.append(img_data["base64"])
-                        except Exception as e:
-                            log.warning("phase1.image_error", page=i + 1, error=str(e)[:200])
-
-                except Exception as e:
-                    log.error("phase1.pdf_error", path=path, error=str(e)[:200])
-
-            elif "image" in att_type.lower():
+            if "image" in att_type.lower():
                 try:
                     img_result = await self._router.call_tool(
                         "get_image_base64", {"image_path": path},

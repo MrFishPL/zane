@@ -9,7 +9,7 @@ interface FileUploadProps {
   onRemove: (id: string) => void;
 }
 
-const ALLOWED_EXTENSIONS = ".pdf,.png,.jpg,.jpeg,.webp";
+const ALLOWED_EXTENSIONS = ".png,.jpg,.jpeg,.webp";
 
 export default function FileUpload({
   uploads,
@@ -77,7 +77,7 @@ export default function FileUpload({
             Drop files here or click to select
           </p>
           <p className="text-xs text-text-muted mt-1">
-            PDF, PNG, JPG, WEBP up to 100 MB
+            PNG, JPG, WEBP up to 100 MB
           </p>
         </div>
       )}

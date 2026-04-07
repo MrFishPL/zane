@@ -137,7 +137,7 @@ export default function ChatWindow({
               Upload a schematic to get started
             </h2>
             <p className="text-sm text-text-secondary max-w-md">
-              Upload a schematic (PDF, photo, or sketch) and describe your
+              Upload a schematic (photo or sketch) and describe your
               requirements. Zane will analyze it and source real, purchasable
               components.
             </p>
@@ -189,7 +189,7 @@ export default function ChatWindow({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              accept=".png,.jpg,.jpeg,.webp"
               multiple
               onChange={(e) => {
                 if (e.target.files) {

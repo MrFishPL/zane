@@ -5,12 +5,11 @@ import { uploadFile as apiUpload, type UploadResult } from "@/lib/api";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_TYPES = [
-  "application/pdf",
   "image/png",
   "image/jpeg",
   "image/webp",
 ];
-const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "webp"];
+const ALLOWED_EXTENSIONS = ["png", "jpg", "jpeg", "webp"];
 
 export interface FileUploadEntry {
   id: string;
@@ -41,7 +40,7 @@ export function useFileUpload() {
       !ALLOWED_TYPES.includes(file.type) &&
       !ALLOWED_EXTENSIONS.includes(ext)
     ) {
-      return `Unsupported file type. Allowed: PDF, PNG, JPG, WEBP`;
+      return `Unsupported file type. Allowed: PNG, JPG, WEBP`;
     }
     return null;
   };

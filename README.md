@@ -6,7 +6,7 @@ Upload a schematic, describe what you need in natural language, and Zane finds r
 
 ## What it does
 
-You upload a schematic (PDF, photo, or hand-drawn sketch) and describe your requirements. Zane's AI agent:
+You upload a schematic (photo or hand-drawn sketch) and describe your requirements. Zane's AI agent:
 
 1. **Analyzes** the schematic using computer vision (Claude)
 2. **Identifies** all electronic components, values, packages, and constraints
@@ -98,7 +98,7 @@ flowchart TD
     START([User sends message<br/>+ schematic]) --> P1
 
     subgraph Phase 1: Parse
-        P1[Parse attachments<br/>PDF rendering, image extraction]
+        P1[Parse attachments<br/>image extraction]
     end
 
     P1 --> P2
@@ -173,7 +173,7 @@ sequenceDiagram
     BE->>RD: SUBSCRIBE agent:status:{conv}
 
     RD->>AG: BLMOVE (pick task)
-    AG->>MCP: Parse PDF, extract images
+    AG->>MCP: Extract images
     AG->>RD: PUBLISH status update
     RD->>BE: Status message
     BE->>FE: WS: "Analyzing schematic..."

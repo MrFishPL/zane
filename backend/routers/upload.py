@@ -17,7 +17,6 @@ router = APIRouter(prefix="/api", tags=["upload"])
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 ALLOWED_MIME_TYPES = {
-    "application/pdf",
     "image/png",
     "image/jpeg",
     "image/webp",
