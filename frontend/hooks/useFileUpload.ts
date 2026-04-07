@@ -48,7 +48,7 @@ export function useFileUpload() {
 
   const upload = useCallback(
     async (file: File, conversationId?: string) => {
-      const id = crypto.randomUUID();
+      const id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       const error = validateFile(file);
       if (error) {
