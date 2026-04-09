@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Web application for automated electronic component sourcing. User uploads a schematic (PDF/photo/sketch), AI agent visually analyzes it, identifies components, searches TME distributor API, and produces a structured BOM with pricing, stock, and downloadable CSV/KiCad/Altium exports.
+Web application for automated electronic component sourcing. User uploads a schematic (photo/sketch), AI agent visually analyzes it, identifies components, searches TME distributor API, and produces a structured BOM with pricing, stock, and downloadable CSV/KiCad/Altium exports.
 
 ## Architecture
 
@@ -16,7 +16,7 @@ Web application for automated electronic component sourcing. User uploads a sche
 - **redis** (Redis 7 :6379) — Task queue (`agent:tasks`) + pub/sub (`agent:status:{conv_id}`)
 - **minio** (MinIO :9000/:9001) — Object storage for uploads/temp/exports
 - **mcp-tme** (:8001) — TME electronic component search (REST, HMAC-SHA1)
-- **mcp-documents** (:8003) — PDF rendering, image processing, base64 retrieval (MinIO)
+- **mcp-documents** (:8003) — Image processing, base64 retrieval (MinIO)
 - **mcp-websearch** (:8004) — Web search fallback (Anthropic API with web_search tool)
 - **mcp-export** (:8005) — CSV/KiCad/Altium library generation (MinIO)
 - **loki** (:3100) + **grafana** (:3001) — Observability

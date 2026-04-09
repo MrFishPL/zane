@@ -104,7 +104,7 @@ flowchart TD
     P1 --> P2
 
     subgraph Phase 2: Analyze
-        P2[LLM analyzes schematic<br/>Vision + extracted text]
+        P2[LLM analyzes schematic<br/>Vision + user requirements]
         P2 --> COMP[Components identified<br/>with values, packages, constraints]
     end
 
@@ -203,13 +203,14 @@ graph LR
     subgraph Internal - auto configured
         I1[REDIS_URL<br/>+ REDIS_PASSWORD]
         I2[MINIO_ENDPOINT<br/>+ credentials]
-        I3[CORS_ORIGINS<br/>Allowed frontends]
+        I3[LOKI_URL<br/>Log aggregation]
     end
 
     subgraph Optional
         O1[ANTHROPIC_MODEL<br/>default: claude-sonnet-4-6]
         O2[TME_LANGUAGE / TME_COUNTRY<br/>default: PL]
         O3[AGENT_MAX_CONCURRENT_TASKS<br/>default: 50]
+        O4[CORS_ORIGINS<br/>Allowed frontends]
     end
 
     A1 --> BE[Backend + Agent]
