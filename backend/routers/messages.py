@@ -67,7 +67,8 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
             try:
                 moved = minio_client.move_files("uploads", src_prefix, "uploads", dst_prefix)
                 for path in moved:
-                    resolved_attachments.append({"path": path, "upload_id": upload_id})
+                    clean_path = path.removeprefix("minio://")
+                    resolved_attachments.append({"path": clean_path, "upload_id": upload_id})
             except Exception as exc:
                 log.warning(
                     "messages.staging_move.error",
