@@ -107,12 +107,17 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function sendMessage(
   conversationId: string,
   message: string,
-  attachments: string[]
+  attachments: string[],
+  uploadIds?: string[]
 ): Promise<void> {
   const attachmentDicts = attachments.map((path) => ({ path }));
   return request<void>(`/api/conversations/${conversationId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ content: message, attachments: attachmentDicts.length > 0 ? attachmentDicts : undefined }),
+    body: JSON.stringify({
+      content: message,
+      attachments: attachmentDicts.length > 0 ? attachmentDicts : undefined,
+      upload_ids: uploadIds && uploadIds.length > 0 ? uploadIds : undefined,
+    }),
   });
 }
 

@@ -59,7 +59,7 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
         )
 
     # Move staging files to conversation path if needed
-    resolved_attachments = body.attachments or []
+    resolved_attachments: list[dict] = []
     if body.upload_ids:
         for upload_id in body.upload_ids:
             src_prefix = f"{DEFAULT_USER_ID}/staging/{upload_id}"
@@ -74,6 +74,9 @@ async def send_message(conversation_id: str, body: SendMessageRequest):
                     upload_id=upload_id,
                     error=str(exc),
                 )
+    # Fall back to provided attachments if no staging files were moved (direct uploads)
+    if not resolved_attachments:
+        resolved_attachments = body.attachments or []
 
     # Get conversation history BEFORE adding the new message (avoids duplication)
     messages = supabase_client.get_messages(conversation_id)

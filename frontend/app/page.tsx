@@ -52,6 +52,7 @@ export default function Home() {
     uploads,
     isUploading,
     completedPaths,
+    completedUploadIds,
     removeUpload,
     clearUploads,
   } = useFileUpload();
@@ -301,7 +302,7 @@ export default function Home() {
   );
 
   const handleSend = useCallback(
-    async (text: string, attachments: string[]) => {
+    async (text: string, attachments: string[], uploadIds: string[]) => {
       let convId = activeId;
 
       // If this is a new chat, create the conversation first
@@ -340,7 +341,7 @@ export default function Home() {
       );
 
       try {
-        await sendMessage(convId, text, attachments);
+        await sendMessage(convId, text, attachments, uploadIds);
       } catch (err) {
         console.error("Failed to send message:", err);
         setAgentStatus({
@@ -385,6 +386,7 @@ export default function Home() {
         uploads={uploads}
         isUploading={isUploading}
         completedPaths={completedPaths}
+        completedUploadIds={completedUploadIds}
         onSend={handleSend}
         onUploadFiles={handleUploadFiles}
         onRemoveUpload={removeUpload}

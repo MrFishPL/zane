@@ -31,6 +31,10 @@ export function useFileUpload() {
     .filter((u) => u.path !== null)
     .map((u) => u.path as string);
 
+  const completedUploadIds = uploads
+    .filter((u) => u.uploadId !== null)
+    .map((u) => u.uploadId as string);
+
   const validateFile = (file: File): string | null => {
     if (file.size > MAX_FILE_SIZE) {
       return `File too large (max 100 MB)`;
@@ -128,6 +132,7 @@ export function useFileUpload() {
     uploads,
     isUploading,
     completedPaths,
+    completedUploadIds,
     removeUpload,
     clearUploads,
   };

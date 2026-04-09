@@ -13,7 +13,8 @@ interface ChatWindowProps {
   uploads: FileUploadEntry[];
   isUploading: boolean;
   completedPaths: string[];
-  onSend: (text: string, attachments: string[]) => void;
+  completedUploadIds: string[];
+  onSend: (text: string, attachments: string[], uploadIds: string[]) => void;
   onUploadFiles: (files: File[]) => void;
   onRemoveUpload: (id: string) => void;
   onToggleSidebar: () => void;
@@ -27,6 +28,7 @@ export default function ChatWindow({
   uploads,
   isUploading,
   completedPaths,
+  completedUploadIds,
   onSend,
   onUploadFiles,
   onRemoveUpload,
@@ -66,13 +68,13 @@ export default function ChatWindow({
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    onSend(inputText.trim(), completedPaths);
+    onSend(inputText.trim(), completedPaths, completedUploadIds);
     setInputText("");
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [canSend, inputText, completedPaths, onSend]);
+  }, [canSend, inputText, completedPaths, completedUploadIds, onSend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
