@@ -59,6 +59,8 @@ export default function Home() {
 
   // Track whether we've done the initial load
   const didInitRef = useRef(false);
+  // Skip the next loadConversation triggered by activeId change (new chat send)
+  const skipNextLoadRef = useRef(false);
 
   // -------------------------------------------------------------------------
   // Load conversations on mount
@@ -126,6 +128,10 @@ export default function Home() {
 
   useEffect(() => {
     if (!activeId || pendingNewChat) {
+      return;
+    }
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false;
       return;
     }
     loadConversation(activeId);
@@ -310,6 +316,7 @@ export default function Home() {
         try {
           const newConv = await createConversation();
           convId = newConv.id;
+          skipNextLoadRef.current = true;
           setActiveId(newConv.id);
           setPendingNewChat(false);
           setConversations((prev) => [newConv, ...prev]);
